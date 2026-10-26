@@ -1,0 +1,10 @@
+# Deny by default. Clients authenticate with username == P2PLink clientId so
+# %u enforces that a connection can only use its own namespace.
+user p2plink-server
+topic read  p2plink/v1/+/+/session/+/c2s
+topic write p2plink/v1/+/+/session/+/s2c
+topic write p2plink/v1/+/+/signal/+/s2c
+
+pattern write p2plink/v1/+/+/session/%u/c2s
+pattern read  p2plink/v1/+/+/session/%u/s2c
+pattern read  p2plink/v1/+/+/signal/%u/s2c

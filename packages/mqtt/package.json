@@ -1,0 +1,21 @@
+{
+  "name": "@p2plink/mqtt",
+  "version": "0.1.0",
+  "description": "MQTT connection, session endpoints and fallback transport for P2PLink",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" }
+  },
+  "files": ["dist", "README.md"],
+  "scripts": { "build": "tsup", "test": "vitest run", "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@p2plink/core": "workspace:*",
+    "mqtt": "^5.16.1"
+  },
+  "engines": { "node": ">=22" }
+}
