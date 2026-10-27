@@ -30,5 +30,6 @@ Aggiornato dal coordinatore. Gli agenti non modificano questo file.
 | D24 | ✅    | Diagnostica errori su MQTT issues/{peerId}, UI e log backend               | lead                    |
 | D25 | ✅    | Presence v2 isolata, 30 s reali e pulizia retained leave                   | lead                    |
 | D26 | ✅    | Presence con contatori tx/rx soggettivi P2P/MQTT                           | lead                    |
+| D27 | ✅    | Immagine multi-arch linux/amd64 + linux/arm64 per Raspberry Pi 64-bit      | GitHub Actions          |
 
 Legenda: ⏳ queued · 🏃 in corso · 🔍 review/test · ✅ fatto · ❌ bloccato
