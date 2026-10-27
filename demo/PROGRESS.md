@@ -31,5 +31,13 @@ Aggiornato dal coordinatore. Gli agenti non modificano questo file.
 | D25 | ✅    | Presence v2 isolata, 30 s reali e pulizia retained leave                   | lead                    |
 | D26 | ✅    | Presence con contatori tx/rx soggettivi P2P/MQTT                           | lead                    |
 | D27 | ✅    | Immagine multi-arch linux/amd64 + linux/arm64 per Raspberry Pi 64-bit      | GitHub Actions          |
+| D28 | ✅    | UI: MQTT only, self actions, totali outbound/inbound                       | lead                    |
+| D29 | ✅    | Componente/pipe Angular per formattare B/KB/MB                             | lead                    |
+| D30 | ✅    | Problemi recenti con TTL 60 s                                              | lead                    |
+| D31 | ✅    | Versione demo 0.2.0                                                        | lead                    |
+| D32 | ✅    | Formattazione byte condivisa tra pipe Angular, web demo e console          | lead                    |
+| D33 | ✅    | Demo Angular identica + deploy Firebase                                    | worker                  |
+| D34 | ✅    | Demo React identica + deploy Firebase                                      | worker                  |
+| D35 | ✅    | Colonna Peer compatta (emoji + nome + versione)                            | lead                    |
 
 Legenda: ⏳ queued · 🏃 in corso · 🔍 review/test · ✅ fatto · ❌ bloccato

@@ -287,8 +287,8 @@ try {
   }
   const byteTexts = await pageA.evaluate(() =>
     [...document.querySelectorAll("#peers tbody tr")].map((row) => ({
-      bytes: row.children[5]?.textContent ?? "",
-      rate: row.children[9]?.textContent ?? "",
+      bytes: row.children[3]?.textContent ?? "",
+      rate: row.children[7]?.textContent ?? "",
     })),
   );
   if (

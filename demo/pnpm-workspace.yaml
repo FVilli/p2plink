@@ -2,3 +2,5 @@ packages:
   - "shared"
   - "backend"
   - "web"
+  - "angular-web"
+  - "react-web"

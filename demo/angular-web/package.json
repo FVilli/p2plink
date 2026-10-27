@@ -1,0 +1,31 @@
+{
+  "name": "@p2plink/demo-angular-web",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "ng serve --host 127.0.0.1 --port 4201",
+    "build": "ng build --configuration production",
+    "preview": "npx --yes http-server dist/browser -p 4201 -c-1",
+    "deploy": "ng build --configuration production && npx --yes firebase-tools@latest deploy --only hosting --project p2plink-demo-angular"
+  },
+  "dependencies": {
+    "@angular/common": "^22.2.3",
+    "@angular/compiler": "^22.2.3",
+    "@angular/core": "^22.2.3",
+    "@angular/platform-browser": "^22.2.3",
+    "@angular/service-worker": "^22.2.3",
+    "@p2plink/angular": "link:../../packages/angular",
+    "@p2plink/core": "link:../../packages/core",
+    "@p2plink/demo-mesh": "workspace:*",
+    "@p2plink/webrtc": "link:../../packages/webrtc",
+    "rxjs": "^7.8.2",
+    "tslib": "^2.8.1"
+  },
+  "devDependencies": {
+    "@angular/build": "^22.2.4",
+    "@angular/cli": "^22.2.4",
+    "@angular/compiler-cli": "^22.2.3",
+    "typescript": "~6.0.3"
+  }
+}

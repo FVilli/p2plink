@@ -151,6 +151,21 @@ td {
 th {
   color: #aab8ca;
 }
+.peer {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.peer-kind {
+  flex: 0 0 auto;
+}
+.peer strong {
+  font-weight: 700;
+}
+.peer .peer-version {
+  color: #9aa8ba;
+  font-size: 11px;
+}
 .route {
   font-weight: 700;
 }

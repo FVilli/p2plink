@@ -78,6 +78,20 @@ const cell = (value: unknown) => {
   td.textContent = String(value ?? "—");
   return td;
 };
+const peerCell = (peer: PeerStats): HTMLTableCellElement => {
+  const td = document.createElement("td");
+  td.className = "peer";
+  const kind = document.createElement("span");
+  kind.className = "peer-kind";
+  kind.textContent = peer.kind === "browser" ? "🌐" : "🖥️";
+  const name = document.createElement("strong");
+  name.textContent = peer.name;
+  const version = document.createElement("small");
+  version.className = "peer-version";
+  version.textContent = peer.version;
+  td.append(kind, name, version);
+  return td;
+};
 const number = (value: number | null) => (value === null ? "—" : value.toFixed(1));
 const ISSUE_TTL_MS = 60_000;
 const routeLabel = (route: PeerStats["route"]) =>
@@ -218,9 +232,7 @@ function render(snapshot: MeshSnapshot): void {
           : ""
       }`;
       tr.append(
-        cell(p.name),
-        cell(p.version),
-        cell(p.kind),
+        peerCell(p),
         route,
         cell(number(p.rttMs)),
         cell(formatByteSize(p.p2pBytes)),

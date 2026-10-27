@@ -6,12 +6,16 @@
   "scripts": {
     "broker:up": "docker compose -f deployment/mosquitto/docker-compose.yml up -d",
     "broker:down": "docker compose -f deployment/mosquitto/docker-compose.yml down -v",
-    "build": "pnpm --filter @p2plink/demo-mesh build && pnpm --filter @p2plink/demo-backend build && pnpm --filter @p2plink/demo-web build",
+    "build": "pnpm --filter @p2plink/demo-mesh build && pnpm --filter @p2plink/demo-backend build && pnpm --filter @p2plink/demo-web build && pnpm --filter @p2plink/demo-angular-web build && pnpm --filter @p2plink/demo-react-web build",
     "dev:web": "pnpm --filter @p2plink/demo-web dev",
     "dev:backend": "pnpm --filter @p2plink/demo-backend start",
     "e2e": "node scripts/e2e.mjs",
     "deploy:web": "pnpm --filter @p2plink/demo-mesh build && pnpm --filter @p2plink/demo-web build && npx --yes firebase-tools@latest deploy --only hosting --project p2plink-demo",
-    "image:build": "docker build -f backend/Dockerfile -t p2plink-demo .."
+    "image:build": "docker build -f backend/Dockerfile -t p2plink-demo ..",
+    "dev:angular": "pnpm --filter @p2plink/demo-angular-web dev",
+    "dev:react": "pnpm --filter @p2plink/demo-react-web dev",
+    "deploy:angular": "pnpm --filter @p2plink/demo-mesh build && pnpm --filter @p2plink/demo-angular-web run deploy",
+    "deploy:react": "pnpm --filter @p2plink/demo-mesh build && pnpm --filter @p2plink/demo-react-web run deploy"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

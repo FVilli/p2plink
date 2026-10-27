@@ -23,7 +23,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build --chown=node:node /app /app
 # The demo runtime only needs the backend, mesh package and library packages.
-RUN rm -rf /app/examples /app/demo/web /app/docs /app/tests /app/scripts /app/.git
+RUN rm -rf /app/examples /app/demo/web /app/demo/angular-web /app/demo/react-web /app/docs /app/tests /app/scripts /app/.git
 USER node
 EXPOSE 3100
 HEALTHCHECK --interval=15s --timeout=5s --retries=5 \

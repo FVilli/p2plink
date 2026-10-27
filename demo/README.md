@@ -50,6 +50,33 @@ Il namespace è passato a `v2` per isolare le vecchie schede che pubblicavano pr
 - i problemi recenti scompaiono automaticamente dopo 60 secondi;
 - l'app demo usa la versione `0.2.0`.
 
+## Tre frontend identici
+
+La stessa UI è disponibile in tre implementazioni, tutte con lo stesso onboarding, PWA, tabelle, contatori formattati e diagnostica MQTT:
+
+| Variante                  | Sorgente           | URL                                  |
+| ------------------------- | ------------------ | ------------------------------------ |
+| Vanilla TypeScript + Vite | `demo/web`         | https://p2plink-demo.web.app         |
+| Angular 22                | `demo/angular-web` | https://p2plink-demo-angular.web.app |
+| React 19 + Vite           | `demo/react-web`   | https://p2plink-demo-react.web.app   |
+
+Build e deploy:
+
+```bash
+pnpm --dir demo install
+pnpm --dir demo build
+
+pnpm --dir demo deploy:web
+pnpm --dir demo deploy:angular
+pnpm --dir demo deploy:react
+```
+
+Le tre app usano la stessa configurazione `p2plink-demo-config` nel `localStorage`, ma ogni origine è un peer MQTT distinto. Ogni app è una PWA installabile e funziona offline dalla cache del proprio service worker.
+
+- Angular usa la pipe standalone `p2pByteSize` di `@p2plink/angular`;
+- React usa un componente locale che chiama `formatByteSize` da `@p2plink/core`;
+- la demo vanilla usa la stessa `formatByteSize`.
+
 ## PWA e offline
 
 La web app è una PWA installabile:
@@ -58,7 +85,7 @@ La web app è una PWA installabile:
 - service worker generato con `vite-plugin-pwa`;
 - app shell disponibile offline;
 - banner “Sei offline” quando `navigator.onLine` è falso;
-- versione applicativa visibile nell'header e nella colonna `Version` della tabella;
+- versione applicativa visibile nell'header e nella colonna compatta `Peer` della tabella;
 - la versione è inclusa anche nei messaggi presence e nella tabella console NestJS.
 
 Quando si torna online, la web app ritenta automaticamente la connessione se esiste una configurazione salvata.
@@ -195,6 +222,7 @@ Le app non hanno un URL di server applicativo: conoscono solo broker e credenzia
 
 ## Tabella
 
+- **Peer**: icona browser `🌐` o servizio `🖥️`, nome in grassetto e versione in piccolo/grigio;
 - **route**: trasporto attivo corrente (`p2p`, `mqtt`, `connecting`); i byte sono attribuiti al trasporto effettivo del singolo ping, non dedotti dalla route;
 - **rtt**: latenza dell'ultimo ping riuscito;
 - **p2p bytes / mqtt bytes**: byte del payload dei ping scambiati su ciascun trasporto, in entrambe le direzioni; sono formattati automaticamente in `B`, `KB` o `MB` con una cifra decimale;
