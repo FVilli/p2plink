@@ -54,6 +54,23 @@ La web app è una PWA installabile:
 
 Quando si torna online, la web app ritenta automaticamente la connessione se esiste una configurazione salvata.
 
+## Raspberry Pi / ARM
+
+L'immagine GHCR è multi-arch:
+
+- `linux/amd64` per PC/server x86;
+- `linux/arm64` per Raspberry Pi 3/4/5 con sistema operativo a **64 bit** (Raspberry Pi OS 64-bit, Ubuntu arm64, DietPi arm64). Verificare con `uname -m` → `aarch64`.
+
+Non è supportato il Raspberry Pi OS a 32 bit (`armv7`/`armhf`), perché la base `node:24-alpine` non fornisce quel runtime. Su un Pi 4/5 usare l'OS a 64 bit.
+
+```bash
+docker pull ghcr.io/fvilli/p2plink-demo:latest
+docker image inspect ghcr.io/fvilli/p2plink-demo:latest \
+  --format '{{.Os}}/{{.Architecture}}'
+```
+
+Docker sceglie automaticamente l'architettura corretta. La build arm64 usa il binario precompilato `node-datachannel` per `linux-arm64-musl`.
+
 ## Broker predefinito
 
 | Voce                     | Valore                                                         |
