@@ -60,6 +60,31 @@ importers:
         specifier: ^5.0.5
         version: 5.0.5(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(less@4.9.1)(sass-embedded@1.106.1)(sass@1.106.1)(tsx@4.23.15))
 
+  demo/shared:
+    dependencies:
+      '@p2plink/core':
+        specifier: ^0.1.0
+        version: link:../../packages/core
+      '@p2plink/crypto':
+        specifier: ^0.1.0
+        version: link:../../packages/crypto
+      '@p2plink/mqtt':
+        specifier: ^0.1.0
+        version: link:../../packages/mqtt
+      '@p2plink/webrtc':
+        specifier: ^0.1.0
+        version: link:../../packages/webrtc
+    devDependencies:
+      '@types/node':
+        specifier: ^24.19.2
+        version: 24.19.2
+      tsup:
+        specifier: ^9.0.0
+        version: 9.0.0(postcss@8.5.32)(tsx@4.23.15)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   examples/angular-nestjs: {}
 
   examples/angular-nestjs/server:

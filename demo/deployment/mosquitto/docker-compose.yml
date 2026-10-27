@@ -1,0 +1,20 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: p2plink-demo-mosquitto
+    ports:
+      - "1884:1884"
+      - "9002:9002"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./aclfile:/mosquitto/config/aclfile:ro
+      - ./passwd:/mosquitto/config/passwd:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mosquitto_pub -h 127.0.0.1 -p 1884 -u demo -P demo-pass -t 'p2plink-demo/health' -m ok",
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 10

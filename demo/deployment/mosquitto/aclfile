@@ -1,0 +1,4 @@
+# Demo user can use only the demo namespace. The demo is a mesh: every peer
+# needs to publish to and read from every other peer's directed topics.
+user demo
+topic readwrite p2plink-demo/#
