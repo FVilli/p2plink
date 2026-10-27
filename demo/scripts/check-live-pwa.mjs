@@ -1,9 +1,15 @@
 import { chromium } from "@playwright/test";
-const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true, args: ["--no-sandbox"] });
+const browser = await chromium.launch({
+  executablePath: "/usr/bin/google-chrome",
+  headless: true,
+  args: ["--no-sandbox"],
+});
 const context = await browser.newContext();
 const page = await context.newPage();
 await page.goto("https://p2plink-demo.web.app", { waitUntil: "networkidle" });
-await page.waitForFunction(() => navigator.serviceWorker.ready.then(() => true), null, { timeout: 20000 });
+await page.waitForFunction(() => navigator.serviceWorker.ready.then(() => true), null, {
+  timeout: 20000,
+});
 await page.reload({ waitUntil: "networkidle" });
 const version = await page.locator("#app-version").innerText();
 const controlled = await page.evaluate(() => Boolean(navigator.serviceWorker.controller));
