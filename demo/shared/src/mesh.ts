@@ -7,6 +7,7 @@ import {
   makeLeave,
   makePresence,
   newPeerId,
+  presenceInboxTopic,
   presenceTopic,
   signalInboxTopic,
 } from "./topics.js";
@@ -91,9 +92,9 @@ class MeshImpl implements MeshPeer {
     try {
       await connection.connect();
       await connection.subscribeAsync(
-        presenceTopic(),
-        (_topic, payload) => {
-          this.handlePresencePayload(payload);
+        presenceInboxTopic(),
+        (topic, payload) => {
+          this.handlePresencePayload(topic, payload);
         },
         1,
       );
@@ -152,7 +153,7 @@ class MeshImpl implements MeshPeer {
     try {
       if (this.connection?.connected && this.identity) {
         await this.connection.publish(
-          presenceTopic(),
+          presenceTopic(this.peerId),
           JSON.stringify(makeLeave(this.peerId, this.config.name, this.config.kind)),
           1,
         );
@@ -194,7 +195,7 @@ class MeshImpl implements MeshPeer {
     if (this.connection.state !== "open") return;
     try {
       await this.connection.publish(
-        presenceTopic(),
+        presenceTopic(this.peerId),
         JSON.stringify(
           makePresence({
             peerId: this.peerId,
@@ -213,7 +214,8 @@ class MeshImpl implements MeshPeer {
     }
   }
 
-  private handlePresencePayload(payload: Uint8Array): void {
+  private handlePresencePayload(topic: string, payload: Uint8Array): void {
+    const topicPeer = /\/presence\/([^/]+)$/u.exec(topic)?.[1];
     let value: unknown;
     try {
       value = JSON.parse(new TextDecoder().decode(payload)) as unknown;
@@ -223,6 +225,13 @@ class MeshImpl implements MeshPeer {
     if (typeof value !== "object" || value === null) return;
     const record = value as Record<string, unknown>;
     if (record.v !== DEMO_PROTOCOL_VERSION || typeof record.peerId !== "string") return;
+    if (!topicPeer || record.peerId !== topicPeer) {
+      this.logger.warn("presence peer id does not match topic", {
+        topicPeer,
+        peerId: record.peerId,
+      });
+      return;
+    }
     if (record.peerId === this.peerId) return;
     if (record.type === "leave") {
       this.removePeer(record.peerId);

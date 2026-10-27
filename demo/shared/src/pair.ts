@@ -22,6 +22,7 @@ import {
   verifyClientHello,
   type DerivedSession,
   type IdentityKeyPair,
+  type SignedServerHello,
 } from "@p2plink/crypto";
 import type { MqttConnection } from "@p2plink/mqtt";
 import { DemoMqttTransport } from "./transport.js";
@@ -71,6 +72,8 @@ export class PairSession {
   private sessionId = randomToken(24);
   private clientState: Awaited<ReturnType<typeof createClientHello>> | null = null;
   private serverState: Awaited<ReturnType<typeof verifyClientHello>> | null = null;
+  private lastServerHello: SignedServerHello | null = null;
+  private sessionToken = 0;
   private security: TransportSecurity | null = null;
   private manager: TransportManager | null = null;
   private mqtt: import("./transport.js").DemoMqttTransport | null = null;
@@ -134,16 +137,21 @@ export class PairSession {
     if (this.closed || this.ready || this.role !== "initiator") return;
     this.clearTimer("handshake");
     this.clearTimer("retry");
-    this.sessionId = randomToken(24);
     try {
-      this.clientState = await createClientHello({
-        tenant: DEMO_TENANT,
-        serverId: DEMO_SERVER_ID,
-        clientId: this.ctx.self.peerId,
-        sessionId: this.sessionId,
-        capability: DEMO_CAPABILITY,
-        identity: this.ctx.identity,
-      });
+      if (!this.clientState) {
+        this.sessionToken += 1;
+        this.sessionId = randomToken(24);
+        this.clientState = await createClientHello({
+          tenant: DEMO_TENANT,
+          serverId: DEMO_SERVER_ID,
+          clientId: this.ctx.self.peerId,
+          sessionId: this.sessionId,
+          capability: DEMO_CAPABILITY,
+          identity: this.ctx.identity,
+        });
+      }
+      // Resend the same signed hello on retry. This avoids a responder
+      // switching to a newer session than the initiator (session mismatch).
       await this.publishHandshake(this.clientState.hello);
       this.handshakeTimer = setTimeout(() => {
         this.handshakeTimer = null;
@@ -166,7 +174,7 @@ export class PairSession {
     const kind = (hello as { kind?: unknown }).kind;
 
     if (kind === "client-hello") {
-      if (this.role !== "responder" || this.ready) return;
+      if (this.role !== "responder") return;
       const clientHello = hello as {
         clientId?: unknown;
         sessionId?: unknown;
@@ -178,6 +186,15 @@ export class PairSession {
         return;
       }
       if (clientHello.sessionId !== message.sessionId) return;
+      if (this.manager) {
+        if (this.sessionId === message.sessionId) {
+          if (this.lastServerHello) await this.publishHandshake(this.lastServerHello);
+          return;
+        }
+        await this.resetSession();
+      }
+      this.sessionToken += 1;
+      const token = this.sessionToken;
       const expected = await publicKeyFingerprint(this.remote.identityPublicKey);
       const received = clientHello.identityPublicKey
         ? await publicKeyFingerprint(clientHello.identityPublicKey)
@@ -202,9 +219,10 @@ export class PairSession {
           this.serverState,
           this.ctx.identity,
         );
+        this.lastServerHello = serverHello;
         await this.publishHandshake(serverHello);
         const derived = await completeServerHandshake(state);
-        await this.createReady(derived, "server");
+        await this.createReady(derived, "server", token);
       } catch (error) {
         this.failHandshake(P2PLinkError.from(error).message);
       }
@@ -218,7 +236,7 @@ export class PairSession {
         const derived = await completeClientHandshake(this.clientState, hello, {
           serverIdentityPin: { publicKeyJwk: this.remote.identityPublicKey },
         });
-        await this.createReady(derived, "client");
+        await this.createReady(derived, "client", this.sessionToken);
       } catch (error) {
         this.failHandshake(P2PLinkError.from(error).message);
       }
@@ -239,8 +257,12 @@ export class PairSession {
     );
   }
 
-  private async createReady(derived: DerivedSession, side: "client" | "server"): Promise<void> {
-    if (this.closed || this.manager) return;
+  private async createReady(
+    derived: DerivedSession,
+    side: "client" | "server",
+    token: number,
+  ): Promise<void> {
+    if (this.closed || this.manager || token !== this.sessionToken) return;
     this.clearTimer("handshake");
     this.security = new TransportSecurity(derived, side, {
       maxFrameBytes: MAX_FRAME_BYTES,
@@ -258,13 +280,14 @@ export class PairSession {
       transports: { mqtt: this.mqtt },
       security: this.security,
       limits: {
-        heartbeatIntervalMs: 1_500,
-        heartbeatTimeoutMs: 5_000,
+        heartbeatIntervalMs: 2_000,
+        heartbeatTimeoutMs: 6_000,
         promoteAfterMs: 800,
         switchCooldownMs: 3_000,
         maxPendingPings: 8,
         maxFrameBytes: MAX_FRAME_BYTES,
       },
+      idleMqttProbeIntervalMs: 15_000,
       logger: this.ctx.logger,
       onUnhealthy: (kind) => {
         if (kind === "webrtc") this.restartWebRtc("unhealthy");
@@ -590,6 +613,27 @@ export class PairSession {
       lastPingAt: this.lastPingAt,
       lastError: this.lastError,
     };
+  }
+
+  private async resetSession(): Promise<void> {
+    this.ready = false;
+    this.lastServerHello = null;
+    this.clientState = null;
+    this.serverState = null;
+    this.pendingSignals.length = 0;
+    if (this.inFlight) {
+      clearTimeout(this.inFlight.timer);
+      this.inFlight = null;
+    }
+    const webrtc = this.webrtc;
+    this.webrtc = null;
+    if (webrtc) await webrtc.close("session-replaced");
+    this.manager?.stop();
+    this.manager = null;
+    this.mqtt = null;
+    this.security = null;
+    this.route = "connecting";
+    this.ctx.onChange();
   }
 
   close(reason = "closed"): void {

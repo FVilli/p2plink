@@ -11,8 +11,12 @@ export function newPeerId(): string {
   return randomToken(9);
 }
 
-export function presenceTopic(): string {
-  return `${MESH_PREFIX}/presence`;
+export function presenceTopic(peerId: string): string {
+  return `${MESH_PREFIX}/presence/${peerId}`;
+}
+
+export function presenceInboxTopic(): string {
+  return `${MESH_PREFIX}/presence/+`;
 }
 
 export function signalInboxTopic(peerId: string): string {

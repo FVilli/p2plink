@@ -372,6 +372,7 @@ try {
             p2p: row.getAttribute("data-p2p-bytes"),
             mqtt: row.getAttribute("data-mqtt-bytes"),
             pings: row.getAttribute("data-pings"),
+            roundTrips: row.getAttribute("data-round-trips"),
             error: row.lastElementChild?.textContent,
           })),
         );

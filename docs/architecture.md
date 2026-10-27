@@ -109,7 +109,7 @@ Responsabilità:
 
 - sottoscrivere i due trasporti;
 - cifrare/decifrare i frame con la chiave del trasporto corretto;
-- inviare heartbeat su **entrambi** i trasporti aperti;
+- inviare heartbeat sul trasporto attivo e sondare il fallback idle a intervallo ridotto;
 - misurare RTT per trasporto;
 - promuovere WebRTC solo dopo stabilità e pong;
 - retrocedere su MQTT in caso di chiusura o timeout;

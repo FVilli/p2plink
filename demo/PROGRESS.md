@@ -20,5 +20,6 @@ Aggiornato dal coordinatore. Gli agenti non modificano questo file.
 | D14 | ✅    | Deploy Firebase Hosting → https://p2plink-demo.web.app                     | lead                    |
 | D15 | ✅    | E2E onboarding + persistenza localStorage                                  | lead                    |
 | D16 | ✅    | Immagine GHCR pubblica e pull verificato                                   | GitHub Actions          |
+| D17 | ✅    | Presence per-peer e riduzione probe MQTT idle                              | lead                    |
 
 Legenda: ⏳ queued · 🏃 in corso · 🔍 review/test · ✅ fatto · ❌ bloccato

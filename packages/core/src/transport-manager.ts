@@ -20,6 +20,7 @@ interface TransportHealth {
   openSince: number | null;
   lastFrameAt: number;
   lastPongAt: number;
+  lastProbeAt: number;
   rttMs: number | null;
   decryptFailures: number;
   sendFailures: number;
@@ -37,6 +38,12 @@ export interface TransportManagerOptions {
   idFactory?: () => string;
   onTransportChange?: (from: TransportKind | null, to: TransportKind | null) => void;
   onUnhealthy?: (kind: TransportKind) => void;
+  /**
+   * While WebRTC is active, probe the idle MQTT fallback at this interval
+   * instead of on every heartbeat. The broker connection itself stays alive
+   * through MQTT keepalive; this only reduces demo/fallback verification noise.
+   */
+  idleMqttProbeIntervalMs?: number;
 }
 
 interface PendingPing {
@@ -48,6 +55,7 @@ const EMPTY_HEALTH: TransportHealth = {
   openSince: null,
   lastFrameAt: 0,
   lastPongAt: 0,
+  lastProbeAt: 0,
   rttMs: null,
   decryptFailures: 0,
   sendFailures: 0,
@@ -64,6 +72,7 @@ export class TransportManager {
   private readonly transports: Partial<Record<TransportKind, Transport>>;
   private readonly security: SessionSecurity;
   private readonly limits: HeartbeatLimits & Pick<P2PLinkLimits, "maxFrameBytes">;
+  private readonly idleMqttProbeIntervalMs: number;
   private readonly logger: Logger;
   private readonly now: () => number;
   private readonly idFactory: () => string;
@@ -109,6 +118,7 @@ export class TransportManager {
       maxPendingPings: options.limits?.maxPendingPings ?? DEFAULT_LIMITS.maxPendingPings,
       maxFrameBytes: options.limits?.maxFrameBytes ?? DEFAULT_LIMITS.maxFrameBytes,
     };
+    this.idleMqttProbeIntervalMs = options.idleMqttProbeIntervalMs ?? 15_000;
     this.logger = options.logger ?? noopLogger;
     this.now = options.now ?? (() => Date.now());
     this.idFactory = options.idFactory ?? randomId;
@@ -306,7 +316,7 @@ export class TransportManager {
 
   /** Sends a heartbeat immediately on every open transport. */
   probeNow(): void {
-    this.heartbeat();
+    this.heartbeat(true);
   }
 
   private handleState(kind: TransportKind, state: TransportState): void {
@@ -316,6 +326,7 @@ export class TransportManager {
         health.openSince = this.now();
         health.lastFrameAt = 0;
         health.lastPongAt = 0;
+        health.lastProbeAt = 0;
         health.decryptFailures = 0;
         this.logger.info("transport opened", { transport: kind });
         this.sendPing(kind);
@@ -336,7 +347,7 @@ export class TransportManager {
     this.emitStatus();
   }
 
-  private heartbeat(): void {
+  private heartbeat(force = false): void {
     if (this.closed) return;
     const now = this.now();
     for (const [id, ping] of this.pendingPings) {
@@ -351,7 +362,16 @@ export class TransportManager {
       }
     }
     for (const kind of ["mqtt", "webrtc"] as const) {
-      if (this.transports[kind]?.state === "open") this.sendPing(kind);
+      if (this.transports[kind]?.state !== "open") continue;
+      if (
+        !force &&
+        this.active === "webrtc" &&
+        kind === "mqtt" &&
+        now - this.health.mqtt.lastProbeAt < this.idleMqttProbeIntervalMs
+      ) {
+        continue;
+      }
+      this.sendPing(kind);
     }
     this.recompute();
     this.emitStatus();
@@ -361,6 +381,7 @@ export class TransportManager {
     const transport = this.transports[kind];
     if (!transport || transport.state !== "open") return;
     if (this.pendingPings.size >= this.limits.maxPendingPings) return;
+    this.health[kind].lastProbeAt = this.now();
     const envelope = createEnvelope("ping", this.sessionId, null, { id: this.idFactory() });
     this.pendingPings.set(envelope.id, { kind, sentAt: this.now() });
     void this.sendDirect(kind, envelope).catch((error: unknown) => {

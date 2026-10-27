@@ -23,6 +23,18 @@ Ogni peer:
 
 Nessun server di signaling, discovery o coordinamento: solo MQTT.
 
+### Topic
+
+```text
+p2plink-demo/v1/presence/{peerId}
+p2plink-demo/v1/signal/{to}/{from}
+p2plink-demo/v1/data/{to}/{from}
+```
+
+- `presence` è per-peer: ogni peer pubblica solo il proprio stato e tutti si sottoscrivono a `presence/+`. Il `peerId` nel topic deve coincidere con quello nel payload.
+- `signal` contiene già `to` e `from`: è usato per lo scambio handshake/offer/answer/ICE iniziale.
+- `data` trasporta i frame cifrati del fallback MQTT e i heartbeat di verifica del canale. Quando il P2P è attivo, i ping applicativi viaggiano sul DataChannel; su MQTT restano solo probe periodiche del fallback (default ogni 15 s) e signaling durante la negoziazione. Per questo vedere messaggi su `data` con tutte le coppie P2P è normale, ma non è il traffico applicativo dei ping.
+
 ## Broker predefinito
 
 | Voce                     | Valore                                                         |

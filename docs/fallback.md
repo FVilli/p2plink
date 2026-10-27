@@ -27,9 +27,10 @@ stateDiagram-v2
 
 ICE può essere `connected` mentre il DataChannel è bloccato, il peer è in pausa o la rete è cambiata. P2PLink usa heartbeat applicativi cifrati:
 
-- ogni `heartbeatIntervalMs` (default 5 s) invia un ping su **ogni** trasporto aperto;
+- ogni `heartbeatIntervalMs` invia un ping sul trasporto attivo; quando WebRTC è attivo, il fallback MQTT viene sondato ogni `idleMqttProbeIntervalMs` (default 15 s) per non generare traffico inutile;
+- un failover o un `resume` forza un probe immediato su entrambi i trasporti;
 - un pong aggiorna `lastPongAt` e l'RTT;
-- un trasporto è sano se ha ricevuto un pong entro `heartbeatTimeoutMs` (default 15 s);
+- un trasporto è sano se ha ricevuto un pong entro `heartbeatTimeoutMs` (default 15 s); il fallback idle viene riattivato immediatamente quando il trasporto attivo cade;
 - WebRTC viene promosso solo se aperto da almeno `promoteAfterMs` (default 3 s) e con pong recente;
 - dopo una retrocessione c'è un cooldown (default 5 s) per evitare flapping.
 
