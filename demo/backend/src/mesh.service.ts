@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { OnApplicationShutdown, OnModuleInit } from "@nestjs/common";
+import { formatByteSize } from "@p2plink/core";
 import { createMeshPeer, type MeshSnapshot } from "@p2plink/demo-mesh";
 import { createNodeWebRtcEngine } from "@p2plink/webrtc/node";
 
@@ -74,12 +75,12 @@ export class MeshService implements OnModuleInit, OnApplicationShutdown {
       peer.kind,
       peer.route,
       peer.rttMs === null ? "-" : `${peer.rttMs}ms`,
-      String(peer.p2pBytes),
+      formatByteSize(peer.p2pBytes),
       String(peer.p2pMessages),
-      String(peer.mqttBytes),
+      formatByteSize(peer.mqttBytes),
       String(peer.mqttMessages),
-      String(peer.p2pBytesPerSec),
-      String(peer.mqttBytesPerSec),
+      `${formatByteSize(peer.p2pBytesPerSec)}/s`,
+      `${formatByteSize(peer.mqttBytesPerSec)}/s`,
       String(peer.pings),
       String(peer.roundTrips),
       peer.lastError ?? "-",

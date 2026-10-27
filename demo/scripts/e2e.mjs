@@ -285,6 +285,18 @@ try {
   if (!p2pBefore.some((row) => row.p2pMessages > 0)) {
     throw new Error("P2P message counters were not populated");
   }
+  const byteTexts = await pageA.evaluate(() =>
+    [...document.querySelectorAll("#peers tbody tr")].map((row) => ({
+      bytes: row.children[5]?.textContent ?? "",
+      rate: row.children[9]?.textContent ?? "",
+    })),
+  );
+  if (
+    !byteTexts.some((value) => /^\d+(?:\.\d)? (?:B|KB|MB|GB)$/.test(value.bytes)) ||
+    !byteTexts.some((value) => /^\d+(?:\.\d)? (?:B|KB|MB|GB)\/s$/.test(value.rate))
+  ) {
+    throw new Error(`bytes are not formatted with units: ${JSON.stringify(byteTexts)}`);
+  }
   console.log(
     "4. P2P ping traffic observed",
     p2pBefore.filter((row) => row.p2pBytes > 0),

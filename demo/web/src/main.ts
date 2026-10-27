@@ -5,6 +5,7 @@ import {
   type MeshSnapshot,
   type PeerStats,
 } from "@p2plink/demo-mesh";
+import { formatByteSize } from "@p2plink/core";
 import { createBrowserWebRtcEngine } from "@p2plink/webrtc";
 import { registerSW } from "virtual:pwa-register";
 import "./style.css";
@@ -122,7 +123,7 @@ function trafficLine(label: string, messages: number, bytes: number): HTMLDivEle
   count.textContent = `${messages} msg`;
   const size = document.createElement("span");
   size.className = "traffic-bytes";
-  size.textContent = `${bytes} B`;
+  size.textContent = formatByteSize(bytes);
   line.append(name, count, size);
   return line;
 }
@@ -222,12 +223,12 @@ function render(snapshot: MeshSnapshot): void {
         cell(p.kind),
         route,
         cell(number(p.rttMs)),
-        cell(p.p2pBytes),
+        cell(formatByteSize(p.p2pBytes)),
         p2pMessages,
-        cell(p.mqttBytes),
+        cell(formatByteSize(p.mqttBytes)),
         mqttMessages,
-        cell(number(p.p2pBytesPerSec)),
-        cell(number(p.mqttBytesPerSec)),
+        cell(`${formatByteSize(p.p2pBytesPerSec)}/s`),
+        cell(`${formatByteSize(p.mqttBytesPerSec)}/s`),
         cell(p.pings),
         cell(p.roundTrips),
         cell(p.lastError),

@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@p2plink/demo-mesh": "workspace:*",
-    "@p2plink/webrtc": "link:../../packages/webrtc"
+    "@p2plink/webrtc": "link:../../packages/webrtc",
+    "@p2plink/core": "link:../../packages/core"
   },
   "devDependencies": {
     "typescript": "^5.9.3",

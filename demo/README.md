@@ -197,9 +197,9 @@ Le app non hanno un URL di server applicativo: conoscono solo broker e credenzia
 
 - **route**: trasporto attivo corrente (`p2p`, `mqtt`, `connecting`); i byte sono attribuiti al trasporto effettivo del singolo ping, non dedotti dalla route;
 - **rtt**: latenza dell'ultimo ping riuscito;
-- **p2p bytes / mqtt bytes**: byte del payload dei ping scambiati su ciascun trasporto, in entrambe le direzioni;
+- **p2p bytes / mqtt bytes**: byte del payload dei ping scambiati su ciascun trasporto, in entrambe le direzioni; sono formattati automaticamente in `B`, `KB` o `MB` con una cifra decimale;
 - **p2p msgs / mqtt msgs**: numero di messaggi applicativi scambiati su ciascun trasporto; il tooltip mostra `tx`/`rx` locali e i contatori riportati dal peer nella presence;
-- **p2p B/s / mqtt B/s**: rate su finestra mobile di 2 secondi;
+- **p2p B/s / mqtt B/s**: rate su finestra mobile di 2 secondi, formattati con la stessa unità automatica;
 - **pings / OK**: ping inviati e round-trip completati con hash valido;
 - **Version**: versione dichiarata dal peer nella presence;
 - **route/status**: emoji `🟢 p2p`, `🟡 mqtt`, `⏳ connecting`, `🟢/🔴 MQTT` per rendere immediata la lettura della sezione connected.

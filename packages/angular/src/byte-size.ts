@@ -6,24 +6,12 @@ import {
   input,
   type PipeTransform,
 } from "@angular/core";
+import { formatByteSize } from "@p2plink/core";
 
 export type ByteSizeInput = number | null | undefined;
 
-/**
- * Human-readable byte size: bytes, KB or MB with one decimal.
- * The unit is chosen from the value, not from the counter type.
- */
-export function formatBytes(value: ByteSizeInput): string {
-  if (value === null || value === undefined || !Number.isFinite(value) || value < 0) {
-    return "—";
-  }
-  if (value < 1024) return `${Math.round(value)} B`;
-  const kb = value / 1024;
-  if (kb < 1024) return `${kb.toFixed(1)} KB`;
-  const mb = kb / 1024;
-  if (mb < 1024) return `${mb.toFixed(1)} MB`;
-  return `${(mb / 1024).toFixed(1)} GB`;
-}
+/** Backwards-compatible name used by the component and pipe. */
+export const formatBytes = formatByteSize;
 
 /**
  * Standalone Angular component for displaying a byte counter.
