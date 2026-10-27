@@ -35,6 +35,7 @@ export function makePresence(input: {
   peerId: string;
   name: string;
   kind: PeerKind;
+  version: string;
   identityId: string;
   identityPublicKey: JsonWebKey;
 }): PresenceMessage {
@@ -44,19 +45,26 @@ export function makePresence(input: {
     peerId: input.peerId,
     name: input.name,
     kind: input.kind,
+    version: input.version,
     identityId: input.identityId,
     identityPublicKey: input.identityPublicKey,
     ts: Date.now(),
   };
 }
 
-export function makeLeave(peerId: string, name: string, kind: PeerKind): PresenceMessage {
+export function makeLeave(
+  peerId: string,
+  name: string,
+  kind: PeerKind,
+  version: string,
+): PresenceMessage {
   return {
     v: DEMO_PROTOCOL_VERSION,
     type: "leave",
     peerId,
     name,
     kind,
+    version,
     identityId: "",
     identityPublicKey: { kty: "EC", crv: "P-256", x: "", y: "" },
     ts: Date.now(),

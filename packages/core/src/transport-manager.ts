@@ -329,7 +329,7 @@ export class TransportManager {
         health.lastProbeAt = 0;
         health.decryptFailures = 0;
         this.logger.info("transport opened", { transport: kind });
-        this.sendPing(kind);
+        if (!(kind === "mqtt" && this.active === "webrtc")) this.sendPing(kind);
       }
     } else {
       const wasOpen = health.openSince !== null;
@@ -344,6 +344,11 @@ export class TransportManager {
       }
     }
     this.recompute();
+    if (this.started && kind === "webrtc" && (state === "failed" || state === "closed")) {
+      // Force one immediate MQTT probe so fallback is usable without waiting
+      // for the next heartbeat. When P2P is healthy we send no data traffic.
+      this.probeNow();
+    }
     this.emitStatus();
   }
 
@@ -363,13 +368,13 @@ export class TransportManager {
     }
     for (const kind of ["mqtt", "webrtc"] as const) {
       if (this.transports[kind]?.state !== "open") continue;
-      if (
-        !force &&
-        this.active === "webrtc" &&
-        kind === "mqtt" &&
-        now - this.health.mqtt.lastProbeAt < this.idleMqttProbeIntervalMs
-      ) {
-        continue;
+      if (!force && this.active === "webrtc" && kind === "mqtt") {
+        if (
+          this.idleMqttProbeIntervalMs === 0 ||
+          now - this.health.mqtt.lastProbeAt < this.idleMqttProbeIntervalMs
+        ) {
+          continue;
+        }
       }
       this.sendPing(kind);
     }

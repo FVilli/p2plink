@@ -4,12 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>P2PLink Mesh</title>
+    <meta name="theme-color" content="#10141c" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
   </head>
   <body>
+    <div id="offline-banner" class="offline-banner" hidden>
+      Sei offline: l'app è aperta dalla cache PWA. La mesh riprenderà quando torni online.
+    </div>
     <main>
       <header>
         <div>
-          <h1>P2PLink Mesh</h1>
+          <h1>P2PLink Mesh <span id="app-version" class="version"></span></h1>
           <p>Browser peer network</p>
         </div>
         <span id="broker-state" data-connected="false">Broker: connecting</span>
@@ -45,6 +52,7 @@
           <thead>
             <tr>
               <th>Name</th>
+              <th>Version</th>
               <th>Kind</th>
               <th>Route</th>
               <th>RTT ms</th>

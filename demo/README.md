@@ -32,8 +32,22 @@ p2plink-demo/v1/data/{to}/{from}
 ```
 
 - `presence` è per-peer: ogni peer pubblica solo il proprio stato e tutti si sottoscrivono a `presence/+`. Il `peerId` nel topic deve coincidere con quello nel payload.
-- `signal` contiene già `to` e `from`: è usato per lo scambio handshake/offer/answer/ICE iniziale.
-- `data` trasporta i frame cifrati del fallback MQTT e i heartbeat di verifica del canale. Quando il P2P è attivo, i ping applicativi viaggiano sul DataChannel; su MQTT restano solo probe periodiche del fallback (default ogni 15 s) e signaling durante la negoziazione. Per questo vedere messaggi su `data` con tutte le coppie P2P è normale, ma non è il traffico applicativo dei ping.
+- `signal` contiene `to` e `from`: trasporta handshake, offer/answer/ICE cifrati con chiavi di signaling dedicate.
+- `data` trasporta **solo** i frame applicativi che non sono passati su P2P (fallback MQTT). Quando tutte le coppie sono P2P non viene pubblicato nulla su `data`.
+- `presence` viene pubblicata ogni 30 secondi per peer, con retain per permettere a un nuovo peer di scoprire subito la rete; Last Will pulisce la presence in caso di disconnessione anomala.
+
+## PWA e offline
+
+La web app è una PWA installabile:
+
+- manifest e icone incluse;
+- service worker generato con `vite-plugin-pwa`;
+- app shell disponibile offline;
+- banner “Sei offline” quando `navigator.onLine` è falso;
+- versione applicativa visibile nell'header e nella colonna `Version` della tabella;
+- la versione è inclusa anche nei messaggi presence e nella tabella console NestJS.
+
+Quando si torna online, la web app ritenta automaticamente la connessione se esiste una configurazione salvata.
 
 ## Broker predefinito
 
@@ -152,7 +166,8 @@ Le app non hanno un URL di server applicativo: conoscono solo broker e credenzia
 - **rtt**: latenza dell'ultimo ping riuscito;
 - **p2p bytes / mqtt bytes**: byte del payload dei ping scambiati su ciascun trasporto, in entrambe le direzioni;
 - **p2p B/s / mqtt B/s**: rate su finestra mobile di 2 secondi;
-- **pings / OK**: ping inviati e round-trip completati con hash valido.
+- **pings / OK**: ping inviati e round-trip completati con hash valido;
+- **Version**: versione dichiarata dal peer nella presence.
 
 I byte delle richieste e delle risposte sono contati sul peer che li invia e sul peer che li riceve. I heartbeat interni di P2PLink non sono conteggiati.
 

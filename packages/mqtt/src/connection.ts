@@ -26,6 +26,13 @@ export interface MqttConnectionOptions {
   logger?: Logger;
   /** Application-level maximum payload size for publish operations. */
   maxPayloadBytes?: number;
+  /** MQTT Last Will (used by the demo to clear stale presence). */
+  will?: {
+    topic: string;
+    payload: Uint8Array | string;
+    qos?: QoS;
+    retain?: boolean;
+  };
 }
 
 interface Subscription {
@@ -76,6 +83,19 @@ export class MqttConnection {
       protocolVersion: this.options.protocolVersion ?? 4,
       ...(this.options.username === undefined ? {} : { username: this.options.username }),
       ...(this.options.password === undefined ? {} : { password: this.options.password }),
+      ...(this.options.will === undefined
+        ? {}
+        : {
+            will: {
+              topic: this.options.will.topic,
+              payload:
+                typeof this.options.will.payload === "string"
+                  ? this.options.will.payload
+                  : (this.options.will.payload as unknown as Buffer),
+              qos: this.options.will.qos ?? 1,
+              retain: this.options.will.retain ?? false,
+            },
+          }),
     };
     this.logger.debug("mqtt connecting", { url: this.options.url, clientId: this.clientId });
     const client = mqtt.connect(this.options.url, options);
@@ -145,7 +165,12 @@ export class MqttConnection {
     });
   }
 
-  async publish(topic: string, payload: Uint8Array | string, qos: QoS = 1): Promise<void> {
+  async publish(
+    topic: string,
+    payload: Uint8Array | string,
+    qos: QoS = 1,
+    options: { retain?: boolean } = {},
+  ): Promise<void> {
     const client = this.client;
     if (!client || this._state !== "open") {
       throw new P2PLinkError(P2PLinkErrorCodes.TRANSPORT_UNAVAILABLE, "MQTT is not connected", {
@@ -157,7 +182,7 @@ export class MqttConnection {
       throw new P2PLinkError(P2PLinkErrorCodes.PAYLOAD_TOO_LARGE, "MQTT payload too large");
     }
     await new Promise<void>((resolve, reject) => {
-      client.publish(topic, bytes as never, { qos }, (error) => {
+      client.publish(topic, bytes as never, { qos, retain: options.retain ?? false }, (error) => {
         if (error) {
           reject(
             new P2PLinkError(P2PLinkErrorCodes.TRANSPORT_SEND_FAILED, error.message, {

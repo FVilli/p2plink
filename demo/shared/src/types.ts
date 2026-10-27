@@ -14,6 +14,7 @@ export interface MeshPeerConfig {
   /** Human-readable name shown by other peers. */
   name: string;
   kind: PeerKind;
+  version?: string;
   /** Random payload size for each ping request/response, in bytes. */
   pingBytes: number;
   /** Provided by the host: browser or Node engine. */
@@ -31,6 +32,7 @@ export interface PeerStats {
   peerId: string;
   name: string;
   kind: PeerKind;
+  version: string;
   route: PeerRoute;
   rttMs: number | null;
   p2pBytes: number;
@@ -52,7 +54,7 @@ export interface MeshTotals {
 }
 
 export interface MeshSnapshot {
-  self: { peerId: string; name: string; kind: PeerKind };
+  self: { peerId: string; name: string; kind: PeerKind; version: string };
   brokerConnected: boolean;
   webRtcEnabled: boolean;
   peers: PeerStats[];
@@ -73,6 +75,7 @@ export interface RemotePeer {
   peerId: string;
   name: string;
   kind: PeerKind;
+  version: string;
   identityId: string;
   identityPublicKey: JsonWebKey;
   lastSeen: number;
@@ -84,6 +87,7 @@ export interface PresenceMessage {
   peerId: string;
   name: string;
   kind: PeerKind;
+  version: string;
   identityId: string;
   identityPublicKey: JsonWebKey;
   ts: number;
@@ -100,6 +104,7 @@ export interface PairView {
   peerId: string;
   name: string;
   kind: PeerKind;
+  version: string;
   route: PeerRoute;
   rttMs: number | null;
   p2pBytes: number;

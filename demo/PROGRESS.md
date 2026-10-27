@@ -21,5 +21,9 @@ Aggiornato dal coordinatore. Gli agenti non modificano questo file.
 | D15 | ✅    | E2E onboarding + persistenza localStorage                                  | lead                    |
 | D16 | ✅    | Immagine GHCR pubblica e pull verificato                                   | GitHub Actions          |
 | D17 | ✅    | Presence per-peer e riduzione probe MQTT idle                              | lead                    |
+| D18 | ✅    | Signaling cifrato spostato sul topic signal; data solo fallback            | lead                    |
+| D19 | ✅    | PWA installabile/offline, banner offline e versione visibile               | lead                    |
+| D20 | ✅    | Presence ogni 30 s, retain/LWT e versione nei messaggi                     | lead                    |
+| D21 | ✅    | Verifica traffico data nullo quando tutte le coppie sono P2P               | lead                    |
 
 Legenda: ⏳ queued · 🏃 in corso · 🔍 review/test · ✅ fatto · ❌ bloccato

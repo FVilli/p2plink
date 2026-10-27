@@ -156,3 +156,20 @@ th {
   margin: 0;
   min-height: 1.2em;
 }
+.version {
+  font-size: 0.65em;
+  color: #9aa8ba;
+  font-weight: 500;
+  vertical-align: middle;
+}
+.offline-banner {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 10px 16px;
+  background: #5a3d12;
+  color: #ffe0a3;
+  text-align: center;
+  font-weight: 600;
+  border-bottom: 1px solid #9b6a1e;
+}

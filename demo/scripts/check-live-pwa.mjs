@@ -1,0 +1,17 @@
+import { chromium } from "@playwright/test";
+const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true, args: ["--no-sandbox"] });
+const context = await browser.newContext();
+const page = await context.newPage();
+await page.goto("https://p2plink-demo.web.app", { waitUntil: "networkidle" });
+await page.waitForFunction(() => navigator.serviceWorker.ready.then(() => true), null, { timeout: 20000 });
+await page.reload({ waitUntil: "networkidle" });
+const version = await page.locator("#app-version").innerText();
+const controlled = await page.evaluate(() => Boolean(navigator.serviceWorker.controller));
+const manifest = await page.evaluate(async () => (await fetch("/manifest.webmanifest")).ok);
+await context.setOffline(true);
+await page.reload({ waitUntil: "domcontentloaded" });
+const offline = await page.locator("#offline-banner").isVisible();
+console.log(JSON.stringify({ version, controlled, manifest, offline, title: await page.title() }));
+await page.screenshot({ path: "/tmp/p2plink-live-pwa.png", fullPage: true });
+await browser.close();
+if (!controlled || !manifest || !offline || !version.startsWith("v")) process.exit(1);

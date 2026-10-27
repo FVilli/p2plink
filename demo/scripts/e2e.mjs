@@ -350,6 +350,26 @@ try {
   await contextC.close();
   console.log("8. onboarding form saved url/username/password/client name in localStorage");
 
+  const pwaContext = await browser.newContext();
+  const pwaPage = await pwaContext.newPage();
+  await pwaPage.goto("http://127.0.0.1:5174/", { waitUntil: "networkidle" });
+  await pwaPage.waitForFunction(() => navigator.serviceWorker.ready.then(() => true), null, {
+    timeout: 15_000,
+  });
+  await pwaPage.reload({ waitUntil: "networkidle" });
+  if (!(await pwaPage.evaluate(() => Boolean(navigator.serviceWorker.controller)))) {
+    throw new Error("service worker is not controlling the PWA");
+  }
+  await pwaContext.setOffline(true);
+  await pwaPage.reload({ waitUntil: "domcontentloaded" });
+  if (!(await pwaPage.locator("#offline-banner").isVisible())) {
+    throw new Error("offline banner not visible after offline reload");
+  }
+  const pwaVersion = await pwaPage.locator("#app-version").innerText();
+  if (!pwaVersion.startsWith("v")) throw new Error(`missing app version: ${pwaVersion}`);
+  await pwaContext.close();
+  console.log("9. PWA opens offline from service worker cache and shows offline banner/version");
+
   const content = await pageA.locator("body").innerText();
   if (/hash mismatch|integrity/i.test(content))
     throw new Error(`integrity error visible: ${content.slice(0, 500)}`);

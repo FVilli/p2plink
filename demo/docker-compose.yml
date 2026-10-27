@@ -10,6 +10,7 @@ services:
       MQTT_PASSWORD: ${MQTT_PASSWORD:?set MQTT_PASSWORD in demo/.env}
       PEER_NAME: ${PEER_NAME:-nest-docker}
       PING_BYTES: ${PING_BYTES:-2048}
+      APP_VERSION: ${APP_VERSION:-0.1.0}
       PORT: 3100
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3100/health >/dev/null || exit 1"]

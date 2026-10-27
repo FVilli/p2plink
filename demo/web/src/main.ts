@@ -5,8 +5,10 @@ import {
   type PeerStats,
 } from "@p2plink/demo-mesh";
 import { createBrowserWebRtcEngine } from "@p2plink/webrtc";
+import { registerSW } from "virtual:pwa-register";
 import "./style.css";
 
+const APP_VERSION = __APP_VERSION__;
 const CONFIG_KEY = "p2plink-demo-config";
 const DEFAULT_URL = "wss://mqtt-ws.fvsg.it:443/ws";
 const DEFAULT_USERNAME = "main:rmq-usr";
@@ -33,6 +35,9 @@ const passwordInput = byId<HTMLInputElement>("broker-password");
 const nameInput = byId<HTMLInputElement>("client-name");
 const configError = byId<HTMLParagraphElement>("config-error");
 const editConfigButton = byId<HTMLButtonElement>("edit-config");
+const offlineBanner = byId<HTMLDivElement>("offline-banner");
+const appVersion = byId<HTMLSpanElement>("app-version");
+appVersion.textContent = `v${APP_VERSION}`;
 
 const env = import.meta.env;
 const randomId = crypto.randomUUID().slice(0, 8);
@@ -53,6 +58,7 @@ const iceServers =
 
 let peer: MeshPeer | null = null;
 let currentConfig: DemoConfig | null = null;
+let lastConfig: DemoConfig | null = null;
 
 const cell = (value: unknown) => {
   const td = document.createElement("td");
@@ -65,6 +71,7 @@ function render(snapshot: MeshSnapshot): void {
   broker.dataset.connected = String(snapshot.brokerConnected);
   broker.textContent = `Broker: ${snapshot.brokerConnected ? "connected" : "disconnected"}`;
   self.textContent = `${snapshot.self.name} (${snapshot.self.peerId})`;
+  appVersion.textContent = `v${snapshot.self.version}`;
   toggle.checked = snapshot.webRtcEnabled;
   totals.innerHTML = `<span>Peers: ${snapshot.totals.peers}</span><span>P2P: ${snapshot.totals.p2pBytes} B (${number(snapshot.totals.p2pBytesPerSec)} B/s)</span><span>MQTT: ${snapshot.totals.mqttBytes} B (${number(snapshot.totals.mqttBytesPerSec)} B/s)</span>`;
   body.replaceChildren(
@@ -72,6 +79,7 @@ function render(snapshot: MeshSnapshot): void {
       const tr = document.createElement("tr");
       tr.dataset.peerId = p.peerId;
       tr.dataset.kind = p.kind;
+      tr.dataset.version = p.version;
       tr.dataset.route = p.route;
       tr.dataset.rtt = String(p.rttMs ?? 0);
       tr.dataset.p2pBytes = String(p.p2pBytes);
@@ -84,6 +92,7 @@ function render(snapshot: MeshSnapshot): void {
       route.className = `route ${p.route}`;
       tr.append(
         cell(p.name),
+        cell(p.version),
         cell(p.kind),
         route,
         cell(number(p.rttMs)),
@@ -193,9 +202,18 @@ async function stopPeer(): Promise<void> {
 }
 
 async function connect(config: DemoConfig): Promise<void> {
-  await stopPeer();
+  lastConfig = config;
   currentConfig = config;
   saveConfig(config);
+  await stopPeer();
+  if (!navigator.onLine) {
+    configPanel.hidden = true;
+    errorBox.hidden = false;
+    errorBox.textContent =
+      "Sei offline. La UI resta disponibile dalla cache PWA; la mesh riprenderà online.";
+    updateOnlineState();
+    return;
+  }
   configPanel.hidden = true;
   configError.textContent = "";
   errorBox.hidden = true;
@@ -209,6 +227,7 @@ async function connect(config: DemoConfig): Promise<void> {
     kind: "browser",
     pingBytes,
     iceServers,
+    version: APP_VERSION,
     engine: createBrowserWebRtcEngine(),
   });
   peer = mesh;
@@ -223,7 +242,11 @@ async function connect(config: DemoConfig): Promise<void> {
     editConfigButton.disabled = true;
     errorBox.hidden = false;
     errorBox.textContent = `Connessione fallita: ${error instanceof Error ? error.message : String(error)}`;
-    showConfigPanel(config, "Connessione fallita. Controlla URL, username e password.");
+    if (!navigator.onLine) {
+      updateOnlineState();
+    } else {
+      showConfigPanel(config, "Connessione fallita. Controlla URL, username e password.");
+    }
   }
 }
 
@@ -240,6 +263,23 @@ editConfigButton.addEventListener("click", () => {
   });
 });
 
+function updateOnlineState(): void {
+  const offline = !navigator.onLine;
+  offlineBanner.hidden = !offline;
+  if (offline && !peer) {
+    broker.dataset.connected = "false";
+    broker.textContent = "Broker: offline";
+  }
+}
+
+window.addEventListener("online", () => {
+  updateOnlineState();
+  if (lastConfig && !peer) void connect(lastConfig);
+});
+window.addEventListener("offline", () => {
+  updateOnlineState();
+});
+
 toggle.addEventListener("change", () => peer?.setWebRtcEnabled(toggle.checked));
 byId<HTMLButtonElement>("reset-stats").addEventListener("click", () => peer?.resetStats());
 
@@ -254,7 +294,21 @@ const runtimeConfig: DemoConfig | null =
     : null;
 const initialConfig = runtimeConfig ?? loadStoredConfig();
 if (initialConfig) {
-  void connect(initialConfig);
+  lastConfig = initialConfig;
+  if (navigator.onLine) void connect(initialConfig);
+  else {
+    updateOnlineState();
+    errorBox.hidden = false;
+    errorBox.textContent =
+      "Sei offline. La UI è disponibile dalla cache PWA; la mesh riprenderà quando torni online.";
+  }
 } else {
   showConfigPanel();
+}
+updateOnlineState();
+
+try {
+  registerSW({ immediate: true });
+} catch {
+  // Service worker is optional; the app remains usable online.
 }

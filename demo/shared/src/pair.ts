@@ -3,6 +3,8 @@ import {
   P2PLinkErrorCodes,
   TransportManager,
   createEnvelope,
+  decodeEnvelopeJson,
+  encodeEnvelopeJson,
   fromBase64Url,
   randomBytes,
   randomToken,
@@ -79,6 +81,7 @@ export class PairSession {
   private mqtt: import("./transport.js").DemoMqttTransport | null = null;
   private webrtc: WebRtcTransportType | null = null;
   private pendingSignals: SignalPayload[] = [];
+  private pendingSignalFrames: Uint8Array[] = [];
   private ready = false;
   private closed = false;
   private inFlight: PendingPing | null = null;
@@ -287,7 +290,7 @@ export class PairSession {
         maxPendingPings: 8,
         maxFrameBytes: MAX_FRAME_BYTES,
       },
-      idleMqttProbeIntervalMs: 15_000,
+      idleMqttProbeIntervalMs: 0,
       logger: this.ctx.logger,
       onUnhealthy: (kind) => {
         if (kind === "webrtc") this.restartWebRtc("unhealthy");
@@ -328,6 +331,46 @@ export class PairSession {
     });
     this.ctx.onChange();
     if (this.ctx.webRtcEnabled()) void this.startWebRtc();
+    for (const frame of this.pendingSignalFrames.splice(0)) {
+      void this.handleSignalFrame(frame);
+    }
+  }
+
+  /** Encrypted offer/answer/ICE frames travel on the signal topic, never data. */
+  private async publishEncryptedSignal(signal: SignalPayload): Promise<void> {
+    if (!this.security) {
+      throw new P2PLinkError(P2PLinkErrorCodes.TRANSPORT_UNAVAILABLE, "pair security is not ready");
+    }
+    const envelope = createEnvelope("signal", this.sessionId, signal);
+    const plaintext = encodeEnvelopeJson(envelope, MAX_FRAME_BYTES);
+    const frame = await this.security.sealSignal(plaintext);
+    await this.ctx.connection.publish(
+      signalTopic(this.remote.peerId, this.ctx.self.peerId),
+      frame,
+      1,
+    );
+  }
+
+  /** Handles a binary encrypted signal frame from the MQTT signal topic. */
+  async handleSignalFrame(frame: Uint8Array): Promise<void> {
+    if (this.closed) return;
+    if (!this.security) {
+      if (this.pendingSignalFrames.length < 32) this.pendingSignalFrames.push(frame);
+      return;
+    }
+    try {
+      const plaintext = await this.security.openSignal(frame);
+      const envelope = decodeEnvelopeJson(plaintext, MAX_FRAME_BYTES);
+      if (envelope.sid !== this.sessionId || envelope.type !== "signal") return;
+      this.handleEnvelope(envelope, "mqtt");
+    } catch (error) {
+      this.lastError = P2PLinkError.from(error).message;
+      this.ctx.logger.warn("encrypted signaling rejected", {
+        peerId: this.remote.peerId,
+        error: this.lastError,
+      });
+      this.ctx.onChange();
+    }
   }
 
   private handleEnvelope(
@@ -521,10 +564,7 @@ export class PairSession {
       maxFrameBytes: MAX_FRAME_BYTES,
       logger: this.ctx.logger,
       sendSignal: async (signal) => {
-        if (!this.manager) throw new P2PLinkError(P2PLinkErrorCodes.OFFLINE, "pair closed");
-        await this.manager.send(createEnvelope("signal", this.sessionId, signal), {
-          via: "mqtt",
-        });
+        await this.publishEncryptedSignal(signal);
       },
     });
     this.webrtc = transport;
@@ -602,6 +642,7 @@ export class PairSession {
       peerId: this.remote.peerId,
       name: this.remote.name,
       kind: this.remote.kind,
+      version: this.remote.version,
       route: this.route,
       rttMs: this.rttMs,
       p2pBytes: rate.p2pBytes,

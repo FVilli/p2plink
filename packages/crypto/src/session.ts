@@ -173,6 +173,7 @@ export interface TransportSecurityOptions {
 export class TransportSecurity {
   readonly sessionId: string;
   private readonly ciphers: Record<TransportKind, FrameCipher>;
+  private readonly signalCipher: FrameCipher;
   private destroyed = false;
 
   constructor(
@@ -185,6 +186,7 @@ export class TransportSecurity {
       mqtt: makeCipher("mqtt", session, role, options),
       webrtc: makeCipher("webrtc", session, role, options),
     };
+    this.signalCipher = makeSignalCipher(session, role, options);
   }
 
   async seal(transport: TransportKind, plaintext: Uint8Array): Promise<Uint8Array> {
@@ -201,11 +203,48 @@ export class TransportSecurity {
     return this.ciphers[transport].open(frame);
   }
 
+  /** Encrypts WebRTC signaling for the dedicated MQTT signal topic. */
+  sealSignal(plaintext: Uint8Array): Promise<Uint8Array> {
+    if (this.destroyed) {
+      return Promise.reject(
+        new P2PLinkError(P2PLinkErrorCodes.CLOSED, "Session security is closed"),
+      );
+    }
+    return this.signalCipher.seal(plaintext);
+  }
+
+  openSignal(frame: Uint8Array): Promise<Uint8Array> {
+    if (this.destroyed) {
+      return Promise.reject(
+        new P2PLinkError(P2PLinkErrorCodes.CLOSED, "Session security is closed"),
+      );
+    }
+    return this.signalCipher.open(frame);
+  }
+
   destroy(): void {
     this.destroyed = true;
     this.ciphers.mqtt.destroy();
     this.ciphers.webrtc.destroy();
+    this.signalCipher.destroy();
   }
+}
+
+function makeSignalCipher(
+  session: DerivedSession,
+  role: "client" | "server",
+  options: TransportSecurityOptions,
+): FrameCipher {
+  const keys = session.keys.signal;
+  return new FrameCipher({
+    sendKey: role === "client" ? keys.c2s : keys.s2c,
+    receiveKey: role === "client" ? keys.s2c : keys.c2s,
+    sessionId: session.sessionId,
+    // Distinct keys make the "mqtt" AAD label safe for signal frames.
+    transport: "mqtt",
+    ...(options.maxFrameBytes === undefined ? {} : { maxFrameBytes: options.maxFrameBytes }),
+    ...(options.replayWindow === undefined ? {} : { replayWindow: options.replayWindow }),
+  });
 }
 
 function makeCipher(

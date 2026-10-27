@@ -12,6 +12,7 @@ export class MeshService implements OnModuleInit, OnApplicationShutdown {
     password: process.env.MQTT_PASSWORD ?? "",
     name: process.env.PEER_NAME ?? `nest-${crypto.randomUUID().slice(0, 6)}`,
     kind: "nest",
+    version: process.env.APP_VERSION ?? "0.1.0",
     pingBytes: Number(process.env.PING_BYTES ?? 2048),
     iceServers:
       process.env.STUN_URLS === ""
@@ -60,6 +61,7 @@ export class MeshService implements OnModuleInit, OnApplicationShutdown {
     ];
     const rows = snapshot.peers.map((peer) => [
       peer.name,
+      peer.version,
       peer.kind,
       peer.route,
       peer.rttMs === null ? "-" : `${peer.rttMs}ms`,
@@ -77,7 +79,7 @@ export class MeshService implements OnModuleInit, OnApplicationShutdown {
     const line = (row: string[]) =>
       row.map((value, index) => String(value).padEnd(widths[index] ?? 0)).join("  ");
     this.logger.log(
-      `broker=${snapshot.brokerConnected ? "connected" : "disconnected"} self=${snapshot.self.name} (${snapshot.self.peerId}) peers=${snapshot.totals.peers}\n` +
+      `broker=${snapshot.brokerConnected ? "connected" : "disconnected"} self=${snapshot.self.name} v${snapshot.self.version} (${snapshot.self.peerId}) peers=${snapshot.totals.peers}\n` +
         `${line(header)}\n${rows.length ? rows.map(line).join("\n") : "(no peers)"}`,
     );
   }

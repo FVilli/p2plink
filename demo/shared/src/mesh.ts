@@ -34,6 +34,7 @@ const consoleLogger: Logger = {
 class MeshImpl implements MeshPeer {
   readonly peerId = newPeerId();
   private readonly config: MeshPeerConfig;
+  private readonly version: string;
   private readonly logger: Logger;
   private identity: Awaited<ReturnType<typeof generateIdentity>> | null = null;
   private connection: MqttConnection | null = null;
@@ -52,10 +53,11 @@ class MeshImpl implements MeshPeer {
 
   constructor(config: MeshPeerConfig) {
     this.config = config;
+    this.version = config.version ?? "0.0.0";
     this.logger = config.logger ?? consoleLogger;
     this.webRtcEnabled = !config.disableWebRtc;
     this.lastSnapshot = {
-      self: { peerId: this.peerId, name: config.name, kind: config.kind },
+      self: { peerId: this.peerId, name: config.name, kind: config.kind, version: this.version },
       brokerConnected: false,
       webRtcEnabled: this.webRtcEnabled,
       peers: [],
@@ -86,6 +88,14 @@ class MeshImpl implements MeshPeer {
       reconnectPeriodMs: 1_000,
       connectTimeoutMs: 10_000,
       maxPayloadBytes: MAX_FRAME_BYTES,
+      will: {
+        topic: presenceTopic(this.peerId),
+        payload: JSON.stringify(
+          makeLeave(this.peerId, this.config.name, this.config.kind, this.version),
+        ),
+        qos: 1,
+        retain: true,
+      },
       logger: this.logger,
     });
     this.connection = connection;
@@ -113,7 +123,7 @@ class MeshImpl implements MeshPeer {
     this.started = true;
     this.stopped = false;
     await this.publishPresence();
-    const presenceInterval = this.config.presenceIntervalMs ?? 2_000;
+    const presenceInterval = this.config.presenceIntervalMs ?? 30_000;
     this.presenceTimer = setInterval(() => {
       void this.publishPresence();
     }, presenceInterval);
@@ -134,6 +144,7 @@ class MeshImpl implements MeshPeer {
       peerId: this.peerId,
       name: this.config.name,
       kind: this.config.kind,
+      version: this.version,
       pingBytes: this.config.pingBytes,
     });
     this.emitSnapshot();
@@ -154,7 +165,7 @@ class MeshImpl implements MeshPeer {
       if (this.connection?.connected && this.identity) {
         await this.connection.publish(
           presenceTopic(this.peerId),
-          JSON.stringify(makeLeave(this.peerId, this.config.name, this.config.kind)),
+          JSON.stringify(makeLeave(this.peerId, this.config.name, this.config.kind, this.version)),
           1,
         );
       }
@@ -201,11 +212,13 @@ class MeshImpl implements MeshPeer {
             peerId: this.peerId,
             name: this.config.name,
             kind: this.config.kind,
+            version: this.version,
             identityId: this.identity.identityId,
             identityPublicKey: this.identity.publicKeyJwk,
           }),
         ),
-        0,
+        1,
+        { retain: true },
       );
     } catch (error) {
       this.logger.debug("presence publish failed", {
@@ -233,6 +246,13 @@ class MeshImpl implements MeshPeer {
       return;
     }
     if (record.peerId === this.peerId) return;
+    const ttl = this.config.peerTtlMs ?? 60_000;
+    if (
+      record.type === "presence" &&
+      (typeof record.ts !== "number" || Date.now() - record.ts > ttl)
+    ) {
+      return;
+    }
     if (record.type === "leave") {
       this.removePeer(record.peerId);
       return;
@@ -241,6 +261,7 @@ class MeshImpl implements MeshPeer {
       record.type !== "presence" ||
       typeof record.name !== "string" ||
       (record.kind !== "browser" && record.kind !== "nest") ||
+      typeof record.version !== "string" ||
       typeof record.identityId !== "string"
     ) {
       return;
@@ -254,6 +275,7 @@ class MeshImpl implements MeshPeer {
       peerId: record.peerId,
       name: record.name.slice(0, 64),
       kind: record.kind as PeerKind,
+      version: record.version.slice(0, 32),
       identityId: record.identityId,
       identityPublicKey: record.identityPublicKey as JsonWebKey,
       lastSeen: Date.now(),
@@ -325,6 +347,11 @@ class MeshImpl implements MeshPeer {
     if (to !== this.peerId || !from || from === this.peerId) return;
     const peer = this.peers.get(from);
     if (!peer) return;
+    if (payload[0] === 0x02) {
+      const pair = this.pairs.get(from);
+      if (pair) void pair.handleSignalFrame(payload);
+      return;
+    }
     let message: unknown;
     try {
       message = JSON.parse(new TextDecoder().decode(payload)) as unknown;
@@ -357,7 +384,7 @@ class MeshImpl implements MeshPeer {
   }
 
   private prunePeers(): void {
-    const ttl = this.config.peerTtlMs ?? 6_000;
+    const ttl = this.config.peerTtlMs ?? 60_000;
     const cutoff = Date.now() - ttl;
     for (const [peerId, peer] of this.peers) {
       if (peer.lastSeen < cutoff) {
@@ -394,6 +421,7 @@ class MeshImpl implements MeshPeer {
           peerId: peer.peerId,
           name: peer.name,
           kind: peer.kind,
+          version: peer.version,
           route: "connecting",
           rttMs: null,
           p2pBytes: 0,
@@ -419,7 +447,12 @@ class MeshImpl implements MeshPeer {
       { peers: peers.length, p2pBytes: 0, mqttBytes: 0, p2pBytesPerSec: 0, mqttBytesPerSec: 0 },
     );
     this.lastSnapshot = {
-      self: { peerId: this.peerId, name: this.config.name, kind: this.config.kind },
+      self: {
+        peerId: this.peerId,
+        name: this.config.name,
+        kind: this.config.kind,
+        version: this.version,
+      },
       brokerConnected: this.connection?.connected ?? false,
       webRtcEnabled: this.webRtcEnabled,
       peers,

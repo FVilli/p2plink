@@ -76,6 +76,8 @@ export interface DirectionalKeys {
 export interface SessionKeys {
   mqtt: DirectionalKeys;
   webrtc: DirectionalKeys;
+  /** Dedicated keys for encrypted signaling on the MQTT signal topic. */
+  signal: DirectionalKeys;
 }
 
 export interface DerivedSession {
@@ -337,6 +339,7 @@ async function deriveSession(
   const keys: SessionKeys = {
     mqtt: await deriveDirectionalKeys(baseKey, salt, clientHello.sessionId, "mqtt"),
     webrtc: await deriveDirectionalKeys(baseKey, salt, clientHello.sessionId, "webrtc"),
+    signal: await deriveDirectionalKeys(baseKey, salt, clientHello.sessionId, "signal"),
   };
   return {
     sessionId: clientHello.sessionId,
@@ -349,7 +352,7 @@ async function deriveDirectionalKeys(
   baseKey: CryptoKey,
   salt: Uint8Array,
   sessionId: string,
-  transport: TransportKind,
+  transport: TransportKind | "signal",
 ): Promise<DirectionalKeys> {
   return {
     c2s: await deriveAesKey(baseKey, salt, `p2plink/v1/${transport}/${sessionId}/c2s`),
