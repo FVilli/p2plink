@@ -1,3 +1,4 @@
+name: p2plink-broker
 services:
   mosquitto:
     image: eclipse-mosquitto:2

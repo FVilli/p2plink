@@ -156,7 +156,7 @@ P2PLINK_CHROME_PATH=/usr/bin/google-chrome pnpm --dir demo e2e
 
 Se Playwright ha Chromium installato, `P2PLINK_CHROME_PATH` può essere omesso.
 
-Lo script avvia due backend, il preview Vite e due schede browser; verifica peer discovery, traffico P2P, fallback MQTT e ripristino P2P.
+Lo script avvia due backend, il preview Vite e due schede browser; verifica peer discovery, round-trip di ogni coppia, traffico P2P browser↔browser e Nest↔Nest, fallback MQTT e ripristino P2P. Il controllo di integrità usa anche un payload volutamente alterato; non simula un attacco di rete sul canale cifrato.
 
 ## Limiti
 

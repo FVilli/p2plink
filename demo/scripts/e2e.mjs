@@ -44,6 +44,17 @@ async function waitHttp(url, timeoutMs = 30_000) {
   throw new Error(`timeout waiting for ${url}`);
 }
 
+async function waitBackendStats(url, predicate, timeoutMs = 45_000) {
+  const deadline = Date.now() + timeoutMs;
+  let last;
+  while (Date.now() < deadline) {
+    last = await fetch(url).then((response) => response.json());
+    if (predicate(last)) return last;
+    await delay(500);
+  }
+  throw new Error(`timeout waiting for ${url}: ${JSON.stringify(last?.totals ?? last)}`);
+}
+
 async function stopChildren() {
   for (const child of children.reverse()) {
     if (child.exitCode !== null) continue;
@@ -240,34 +251,22 @@ try {
     p2pBefore.filter((row) => row.p2pBytes > 0),
   );
 
-  const backendStats = await fetch("http://127.0.0.1:3100/stats").then((response) =>
-    response.json(),
+  const backendStats = await waitBackendStats(
+    "http://127.0.0.1:3100/stats",
+    (stats) =>
+      stats.totals?.p2pBytes > 0 &&
+      stats.peers?.length >= 3 &&
+      stats.peers.every((peer) => peer.pings > 0 && peer.roundTrips > 0 && peer.route === "p2p") &&
+      stats.peers.some((peer) => peer.kind === "browser") &&
+      stats.peers.some((peer) => peer.kind === "nest"),
   );
-  if (
-    backendStats.totals.p2pBytes <= 0 ||
-    backendStats.peers.length < 3 ||
-    !backendStats.peers.every((peer) => peer.pings > 0 && peer.roundTrips > 0) ||
-    !backendStats.peers.some((peer) => peer.route === "p2p" && peer.kind === "browser") ||
-    !backendStats.peers.some((peer) => peer.route === "p2p" && peer.kind === "nest") ||
-    !backendStats.peers.every((peer) => peer.route === "p2p")
-  ) {
-    throw new Error(
-      `backend did not observe browser/nest P2P traffic: ${JSON.stringify(backendStats)}`,
-    );
-  }
-  const backendBStats = await fetch("http://127.0.0.1:3101/stats").then((response) =>
-    response.json(),
+  await waitBackendStats(
+    "http://127.0.0.1:3101/stats",
+    (stats) =>
+      stats.peers?.some(
+        (peer) => peer.name === "e2e-nest-a" && peer.kind === "nest" && peer.route === "p2p",
+      ) && stats.peers?.some((peer) => peer.kind === "browser" && peer.route === "p2p"),
   );
-  if (
-    !backendBStats.peers?.some(
-      (peer) => peer.name === "e2e-nest-a" && peer.kind === "nest" && peer.route === "p2p",
-    ) ||
-    !backendBStats.peers?.some((peer) => peer.kind === "browser" && peer.route === "p2p")
-  ) {
-    throw new Error(
-      `nest-b did not observe nest-a/browser P2P traffic: ${JSON.stringify(backendBStats)}`,
-    );
-  }
   console.log("5. NestJS console/mesh stats show P2P traffic", backendStats.totals);
 
   const mqttBefore = (await peerRows(pageA)).reduce((sum, row) => sum + row.mqttBytes, 0);
