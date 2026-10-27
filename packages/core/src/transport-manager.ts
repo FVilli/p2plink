@@ -24,6 +24,8 @@ interface TransportHealth {
   rttMs: number | null;
   decryptFailures: number;
   sendFailures: number;
+  /** True after at least one authenticated frame from the remote peer. */
+  confirmed: boolean;
 }
 
 export interface TransportManagerOptions {
@@ -65,6 +67,7 @@ const EMPTY_HEALTH: TransportHealth = {
   rttMs: null,
   decryptFailures: 0,
   sendFailures: 0,
+  confirmed: false,
 };
 
 /**
@@ -277,6 +280,58 @@ export class TransportManager {
     });
   }
 
+  /**
+   * Waits until the remote peer has sent at least one authenticated frame on
+   * this transport. This is a stronger guarantee than `waitForTransport()`:
+   * the MQTT session can be open locally while the remote subscription is not
+   * ready yet, in which case an immediate application message would be lost.
+   */
+  waitForConfirmedTransport(timeoutMs: number, kind: TransportKind = "mqtt"): Promise<void> {
+    if (this.isConfirmed(kind)) return Promise.resolve();
+    if (this.closed) {
+      return Promise.reject(new P2PLinkError(P2PLinkErrorCodes.CLOSED, "Manager is closed"));
+    }
+    return new Promise<void>((resolve, reject) => {
+      const deadline = this.now() + timeoutMs;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const cleanup = () => {
+        if (timer) clearTimeout(timer);
+        timer = null;
+      };
+      const tick = () => {
+        if (this.closed) {
+          cleanup();
+          reject(new P2PLinkError(P2PLinkErrorCodes.CLOSED, "Manager is closed"));
+          return;
+        }
+        if (this.isConfirmed(kind)) {
+          cleanup();
+          resolve();
+          return;
+        }
+        if (this.now() >= deadline) {
+          cleanup();
+          reject(
+            new P2PLinkError(
+              P2PLinkErrorCodes.TIMEOUT,
+              `Timed out waiting for a confirmed ${kind} peer`,
+              { retryable: true },
+            ),
+          );
+          return;
+        }
+        if (this.transports[kind]?.state === "open") this.sendPing(kind);
+        timer = setTimeout(tick, 100);
+        timer.unref?.();
+      };
+      tick();
+    });
+  }
+
+  private isConfirmed(kind: TransportKind): boolean {
+    return this.transports[kind]?.state === "open" && this.health[kind].confirmed;
+  }
+
   async send(
     envelope: ReturnType<typeof createEnvelope>,
     options: TransportSendOptions = {},
@@ -336,6 +391,7 @@ export class TransportManager {
         health.lastPongAt = 0;
         health.lastProbeAt = 0;
         health.decryptFailures = 0;
+        health.confirmed = false;
         if (kind === "mqtt" && this.assumeMqttReachableOnOpen) {
           // MQTT is a connected broker session; do not wait for the first
           // ping/pong before exposing the fallback route.
@@ -349,6 +405,7 @@ export class TransportManager {
       health.openSince = null;
       health.lastPongAt = 0;
       health.rttMs = null;
+      health.confirmed = false;
       if (wasOpen || state === "failed") {
         this.logger.warn("transport unavailable", { transport: kind, state });
       }
@@ -445,6 +502,7 @@ export class TransportManager {
     }
     const now = this.now();
     this.health[kind].lastFrameAt = now;
+    this.health[kind].confirmed = true;
     if (envelope.type === "ping") {
       const pong = createEnvelope("pong", this.sessionId, null, {
         id: this.idFactory(),

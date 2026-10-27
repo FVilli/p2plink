@@ -41,5 +41,6 @@ Aggiornato dal coordinatore. Gli agenti non modificano questo file.
 | D35 | ✅    | Colonna Peer compatta (emoji + nome + versione)                            | lead                    |
 | D36 | ✅    | Bump versione demo 0.2.1                                                   | lead                    |
 | D37 | ✅    | Fallback MQTT immediato senza attendere il primo pong                      | lead                    |
+| D38 | ✅    | Barriera di conferma peer prima dei messaggi applicativi MQTT              | lead                    |
 
 Legenda: ⏳ queued · 🏃 in corso · 🔍 review/test · ✅ fatto · ❌ bloccato

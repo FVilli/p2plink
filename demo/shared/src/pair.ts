@@ -329,7 +329,7 @@ export class PairSession {
     });
     manager.start();
     try {
-      await manager.waitForTransport(10_000);
+      await manager.waitForConfirmedTransport(10_000, "mqtt");
     } catch (error) {
       this.lastError = P2PLinkError.from(error).message;
       this.ctx.logger.warn("pair transport not ready", {

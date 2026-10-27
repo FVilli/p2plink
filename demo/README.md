@@ -266,7 +266,9 @@ Il ricevente verifica lunghezza e SHA-256, poi restituisce gli stessi byte e has
 
 Il trasporto effettivo è noto perché `TransportManager.send()` restituisce il trasporto usato e `onEnvelope` espone il trasporto su cui è arrivata la risposta.
 
-Il fallback MQTT viene reso disponibile **appena la sessione MQTT è aperta e l'handshake è completato**, senza aspettare il primo ping/pong. Il P2P può richiedere qualche secondo in più; la route MQTT è immediatamente utilizzabile.
+Il fallback MQTT viene reso disponibile **appena la sessione MQTT è aperta e l'handshake è completato**, senza aspettare il primo ping/pong. La UI può quindi mostrare `mqtt` subito; prima di inviare messaggi applicativi la sessione attende una conferma autenticata dal peer, evitando la race in cui il subscriber remoto non è ancora pronto. Il P2P può richiedere qualche secondo in più.
+
+MQTT QoS 1 non è una garanzia di consegna end-to-end persistente: se il peer è offline e la sessione è `clean`, il messaggio non viene conservato. Per dati critici usare RPC idempotenti/retry e una risincronizzazione applicativa.
 
 ## Forzare il fallback MQTT
 
