@@ -378,7 +378,7 @@ MQTT_PASSWORD='<password>' PEER_NAME=nest-1 PORT=3100 PING_BYTES=2048 \
 pnpm --dir demo dev:backend
 ```
 
-Immagine backend: `ghcr.io/fvilli/p2plink-demo:latest` (Node 24 Alpine). Per test/E2E offline è disponibile anche `pnpm --dir demo broker:up` (1884/9002, utente demo/demo-pass), con override di URL e credenziali. Dettagli e deploy Firebase/GHCR: [demo/README.md](demo/README.md).
+Web demo live: https://p2plink-demo.web.app — immagine backend: `ghcr.io/fvilli/p2plink-demo:latest` (Node 24 Alpine). Per test/E2E offline è disponibile anche `pnpm --dir demo broker:up` (1884/9002, utente demo/demo-pass), con override di URL e credenziali. Dettagli e deploy Firebase/GHCR: [demo/README.md](demo/README.md).
 
 ### Angular ↔ NestJS
 

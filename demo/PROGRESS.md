@@ -17,7 +17,7 @@ Aggiornato dal coordinatore. Gli agenti non modificano questo file.
 | D11 | ✅    | Configurazione Firebase Hosting (progetto p2plink-demo)                    | lead                    |
 | D12 | ✅    | Immagine Docker node:24-alpine + compose con password da env               | lead                    |
 | D13 | ✅    | Pubblicazione GHCR via GitHub Actions                                      | lead                    |
-| D14 | ❌    | Deploy Firebase Hosting — bloccato: Firebase CLI non autenticato           | lead (credenziali)      |
+| D14 | ✅    | Deploy Firebase Hosting → https://p2plink-demo.web.app                     | lead                    |
 | D15 | ✅    | E2E onboarding + persistenza localStorage                                  | lead                    |
 | D16 | ✅    | Immagine GHCR pubblica e pull verificato                                   | GitHub Actions          |
 

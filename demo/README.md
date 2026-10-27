@@ -208,9 +208,9 @@ npx --yes firebase-tools@latest login
 pnpm --dir demo deploy:web
 ```
 
-L'URL atteso è `https://p2plink-demo.web.app`.
+Deploy eseguito: **https://p2plink-demo.web.app**
 
-In CI il workflow `.github/workflows/demo-hosting.yml` richiede il secret `FIREBASE_TOKEN` (`firebase login:ci`). Non è stato possibile completare il deploy da questo ambiente senza autenticazione Firebase.
+In CI il workflow `.github/workflows/demo-hosting.yml` richiede il secret `FIREBASE_TOKEN` (`firebase login:ci`) per i deploy automatici successivi.
 
 ## E2E
 
