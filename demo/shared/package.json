@@ -21,10 +21,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@p2plink/core": "^0.1.0",
-    "@p2plink/crypto": "^0.1.0",
-    "@p2plink/mqtt": "^0.1.0",
-    "@p2plink/webrtc": "^0.1.0"
+    "@p2plink/core": "link:../../packages/core",
+    "@p2plink/crypto": "link:../../packages/crypto",
+    "@p2plink/mqtt": "link:../../packages/mqtt",
+    "@p2plink/webrtc": "link:../../packages/webrtc"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

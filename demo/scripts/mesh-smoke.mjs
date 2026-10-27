@@ -16,11 +16,37 @@ const a = createMeshPeer({ ...base, name: "smoke-a" });
 const b = createMeshPeer({ ...base, name: "smoke-b" });
 a.onSnapshot((s) => {
   const p = s.peers[0];
-  if (p) console.log("A", s.brokerConnected, p.name, p.route, "p2p", p.p2pBytes, "mqtt", p.mqttBytes, "rtt", p.rttMs, p.lastError ?? "");
+  if (p)
+    console.log(
+      "A",
+      s.brokerConnected,
+      p.name,
+      p.route,
+      "p2p",
+      p.p2pBytes,
+      "mqtt",
+      p.mqttBytes,
+      "rtt",
+      p.rttMs,
+      p.lastError ?? "",
+    );
 });
 b.onSnapshot((s) => {
   const p = s.peers[0];
-  if (p) console.log("B", s.brokerConnected, p.name, p.route, "p2p", p.p2pBytes, "mqtt", p.mqttBytes, "rtt", p.rttMs, p.lastError ?? "");
+  if (p)
+    console.log(
+      "B",
+      s.brokerConnected,
+      p.name,
+      p.route,
+      "p2p",
+      p.p2pBytes,
+      "mqtt",
+      p.mqttBytes,
+      "rtt",
+      p.rttMs,
+      p.lastError ?? "",
+    );
 });
 await a.start();
 await b.start();
@@ -28,7 +54,12 @@ const deadline = Date.now() + 20000;
 while (Date.now() < deadline) {
   const sa = a.getSnapshot();
   const sb = b.getSnapshot();
-  if (sa.peers[0]?.p2pBytes > 0 && sb.peers[0]?.p2pBytes > 0) {
+  if (
+    sa.peers[0]?.p2pBytes > 0 &&
+    sb.peers[0]?.p2pBytes > 0 &&
+    sa.peers[0]?.pings > 0 &&
+    sb.peers[0]?.pings > 0
+  ) {
     console.log("SMOKE SUCCESS", JSON.stringify({ a: sa.peers, b: sb.peers }));
     break;
   }

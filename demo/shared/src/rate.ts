@@ -50,7 +50,7 @@ export class RateMeter {
       }
     }
     const base = baseline ?? { at: now, p2p: this.p2p, mqtt: this.mqtt };
-    const elapsed = Math.max(1, now - base.at);
+    const elapsed = Math.max(500, now - base.at);
     return {
       p2pBytes: this.p2p,
       mqttBytes: this.mqtt,

@@ -1,10 +1,4 @@
-import {
-  P2PLinkError,
-  P2PLinkErrorCodes,
-  noopLogger,
-  type Logger,
-  type Unsubscribe,
-} from "@p2plink/core";
+import { P2PLinkError, P2PLinkErrorCodes, type Logger, type Unsubscribe } from "@p2plink/core";
 import { generateIdentity, publicKeyFingerprint, validatePublicJwk } from "@p2plink/crypto";
 import { MqttConnection } from "@p2plink/mqtt";
 import { PairSession } from "./pair.js";
@@ -397,6 +391,7 @@ class MeshImpl implements MeshPeer {
           p2pBytesPerSec: 0,
           mqttBytesPerSec: 0,
           pings: 0,
+          roundTrips: 0,
           lastPingAt: null,
           lastError: null,
         });

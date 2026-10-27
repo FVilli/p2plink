@@ -1,0 +1,103 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #10141c;
+  color: #e8edf5;
+  font:
+    15px system-ui,
+    sans-serif;
+}
+main {
+  max-width: 1400px;
+  margin: 40px auto;
+  padding: 0 24px;
+}
+header,
+.self,
+.controls,
+.totals {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+h1 {
+  margin: 0;
+  font-size: 28px;
+}
+header p {
+  color: #9aa8ba;
+  margin: 4px 0 20px;
+}
+#broker-state,
+.self,
+.controls,
+.totals {
+  padding: 16px;
+  background: #1a2230;
+  border: 1px solid #2b3749;
+  border-radius: 8px;
+}
+.self {
+  margin: 16px 0;
+}
+.controls {
+  justify-content: flex-start;
+}
+.controls label {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+button {
+  background: #426de0;
+  color: white;
+  border: 0;
+  border-radius: 5px;
+  padding: 9px 15px;
+  cursor: pointer;
+}
+.totals {
+  margin: 16px 0;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+.table-wrap {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #1a2230;
+}
+th,
+td {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid #303b4c;
+  white-space: nowrap;
+}
+th {
+  color: #aab8ca;
+}
+.route {
+  font-weight: 700;
+}
+.route.p2p {
+  color: #65d49a;
+}
+.route.mqtt {
+  color: #f3bd64;
+}
+.route.connecting {
+  color: #9caecc;
+}
+#error {
+  margin: 16px 0;
+  padding: 12px;
+  color: #ff9c9c;
+  background: #351e26;
+  border-radius: 6px;
+}

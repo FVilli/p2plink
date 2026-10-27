@@ -1,0 +1,19 @@
+{
+  "name": "@p2plink/demo-web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5174",
+    "preview": "vite preview --host 0.0.0.0 --port 5174",
+    "build": "tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "@p2plink/demo-mesh": "workspace:*",
+    "@p2plink/webrtc": "link:../../packages/webrtc"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vite": "^6.4.1"
+  }
+}

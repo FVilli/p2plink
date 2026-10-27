@@ -37,6 +37,7 @@ export interface PeerStats {
   p2pBytesPerSec: number;
   mqttBytesPerSec: number;
   pings: number;
+  roundTrips: number;
   lastPingAt: number | null;
   lastError: string | null;
 }
@@ -105,6 +106,7 @@ export interface PairView {
   p2pBytesPerSec: number;
   mqttBytesPerSec: number;
   pings: number;
+  roundTrips: number;
   lastPingAt: number | null;
   lastError: string | null;
 }

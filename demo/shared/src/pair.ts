@@ -28,6 +28,7 @@ import { DemoMqttTransport } from "./transport.js";
 import type { WebRtcEngine, WebRtcTransport as WebRtcTransportType } from "@p2plink/webrtc";
 import { WebRtcTransport } from "@p2plink/webrtc";
 import { RateMeter } from "./rate.js";
+import { verifyPingPayload } from "./ping.js";
 import { DEMO_CAPABILITY, DEMO_SERVER_ID, DEMO_TENANT, dataTopic, signalTopic } from "./topics.js";
 import type { HandshakeMessage, PairView, PeerKind, PeerRoute, RemotePeer } from "./types.js";
 
@@ -84,6 +85,7 @@ export class PairSession {
   private route: PeerRoute = "connecting";
   private readonly meter = new RateMeter();
   private pings = 0;
+  private roundTrips = 0;
   private rttMs: number | null = null;
   private lastPingAt: number | null = null;
   private lastError: string | null = null;
@@ -268,13 +270,7 @@ export class PairSession {
       },
     });
     this.manager = manager;
-    this.ctx.logger.debug("pair manager started", { peerId: this.remote.peerId, role: this.role });
     manager.onEnvelope((envelope, transport) => {
-      this.ctx.logger.debug("pair envelope", {
-        peerId: this.remote.peerId,
-        type: envelope.type,
-        transport,
-      });
       this.handleEnvelope(envelope, transport);
     });
     manager.onStatus((snapshot) => {
@@ -361,6 +357,7 @@ export class PairSession {
     try {
       const kind = await this.manager.send(envelope);
       this.meter.add(kind, bytes.length);
+      this.pings += 1;
       this.lastPingAt = sentAt;
       this.ctx.onChange();
     } catch (error) {
@@ -387,26 +384,30 @@ export class PairSession {
     const expectedSize = typeof params.size === "number" ? params.size : -1;
     let bytes: Uint8Array | null = null;
     try {
-      bytes = encoded ? fromBase64Url(encoded) : null;
+      if (encoded) bytes = fromBase64Url(encoded);
     } catch {
       bytes = null;
     }
     const received = bytes?.length ?? 0;
     if (received > 0) this.meter.add(transport, received);
-    if (!bytes || !expectedHash || bytes.length !== expectedSize) {
-      this.lastError = "invalid ping payload";
+    const verified = await verifyPingPayload({
+      size: expectedSize,
+      bytes: encoded ?? "",
+      hash: expectedHash ?? "",
+    });
+    if (!verified) {
+      this.lastError = "ping integrity failure";
       this.ctx.onChange();
-      await this.sendPong(envelope.id, id, null, "invalid");
+      await this.sendPong(envelope.id, id, null, "integrity");
       return;
     }
-    const actualHash = await sha256Base64Url(bytes);
-    if (actualHash !== expectedHash) {
-      this.lastError = "ping hash mismatch";
-      this.ctx.onChange();
-      await this.sendPong(envelope.id, id, null, "hash-mismatch");
-      return;
-    }
-    await this.sendPong(envelope.id, id, { bytes, hash: actualHash, size: bytes.length }, null);
+    const actualHash = await sha256Base64Url(verified);
+    await this.sendPong(
+      envelope.id,
+      id,
+      { bytes: verified, hash: actualHash, size: verified.length },
+      null,
+    );
   }
 
   private async sendPong(
@@ -474,7 +475,7 @@ export class PairSession {
         throw new Error("response hash mismatch");
       }
       this.meter.add(transport, bytes.length);
-      this.pings += 1;
+      this.roundTrips += 1;
       this.rttMs = Math.max(0, Date.now() - pending.sentAt);
       this.lastError = null;
     } catch (error) {
@@ -564,6 +565,7 @@ export class PairSession {
   resetStats(): void {
     this.meter.reset();
     this.pings = 0;
+    this.roundTrips = 0;
     this.rttMs = null;
     this.lastPingAt = null;
     this.lastError = null;
@@ -583,6 +585,7 @@ export class PairSession {
       p2pBytesPerSec: rate.p2pBytesPerSec,
       mqttBytesPerSec: rate.mqttBytesPerSec,
       pings: this.pings,
+      roundTrips: this.roundTrips,
       lastPingAt: this.lastPingAt,
       lastError: this.lastError,
     };

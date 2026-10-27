@@ -1,0 +1,19 @@
+{
+  "name": "@p2plink/demo",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "broker:up": "docker compose -f deployment/mosquitto/docker-compose.yml up -d",
+    "broker:down": "docker compose -f deployment/mosquitto/docker-compose.yml down -v",
+    "build": "pnpm --filter @p2plink/demo-mesh build && pnpm --filter @p2plink/demo-backend build && pnpm --filter @p2plink/demo-web build",
+    "dev:web": "pnpm --filter @p2plink/demo-web dev",
+    "dev:backend": "pnpm --filter @p2plink/demo-backend start",
+    "e2e": "node scripts/e2e.mjs"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

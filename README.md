@@ -364,6 +364,19 @@ pnpm --filter @p2plink/example-browser-node dev
 
 Mostra stato trasporto, RTT, RPC, eventi, guasto P2P simulato, fallback MQTT, ripristino P2P e sospensione/ripresa della rete.
 
+### Mesh demo (broker come unico singleton)
+
+La demo dedicata in [demo/](demo/README.md) mostra frontend e backend NestJS come peer equivalenti: discovery, ping a rotazione, integrità SHA-256, traffico P2P/MQTT e rate per peer.
+
+```bash
+pnpm demo:build
+pnpm --dir demo broker:up
+pnpm --dir demo dev:web
+# in altri terminali, uno o più backend:
+MQTT_URL=mqtt://127.0.0.1:1884 MQTT_USERNAME=demo MQTT_PASSWORD=demo-pass \
+PEER_NAME=nest-1 PORT=3100 PING_BYTES=2048 pnpm --dir demo dev:backend
+```
+
 ### Angular ↔ NestJS
 
 ```bash

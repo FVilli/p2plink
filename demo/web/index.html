@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>P2PLink Mesh</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>P2PLink Mesh</h1>
+          <p>Browser peer network</p>
+        </div>
+        <span id="broker-state" data-connected="false">Broker: connecting</span>
+      </header>
+      <section class="self">
+        <strong>Self peer</strong><span id="self-peer">Starting…</span>
+      </section>
+      <section class="controls">
+        <label><input id="toggle-p2p" type="checkbox" checked /> P2P abilitato</label
+        ><button id="reset-stats" type="button">Reset stats</button>
+      </section>
+      <div id="error" role="alert" hidden></div>
+      <section class="totals" id="totals"></section>
+      <div class="table-wrap">
+        <table id="peers">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Kind</th>
+              <th>Route</th>
+              <th>RTT ms</th>
+              <th>P2P bytes</th>
+              <th>MQTT bytes</th>
+              <th>P2P B/s</th>
+              <th>MQTT B/s</th>
+              <th>Pings</th>
+              <th>Last error</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
