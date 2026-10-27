@@ -266,6 +266,8 @@ Il ricevente verifica lunghezza e SHA-256, poi restituisce gli stessi byte e has
 
 Il trasporto effettivo è noto perché `TransportManager.send()` restituisce il trasporto usato e `onEnvelope` espone il trasporto su cui è arrivata la risposta.
 
+Il fallback MQTT viene reso disponibile **appena la sessione MQTT è aperta e l'handshake è completato**, senza aspettare il primo ping/pong. Il P2P può richiedere qualche secondo in più; la route MQTT è immediatamente utilizzabile.
+
 ## Forzare il fallback MQTT
 
 Il toggle P2P è stato rimosso dalla UI. Per una prova di fallback si può avviare un backend con `WEBRTC_ENABLED=false`, oppure usare l'hook di test della suite E2E. I ping successivi passano dal broker e le colonne MQTT aumentano.

@@ -44,6 +44,12 @@ export interface TransportManagerOptions {
    * through MQTT keepalive; this only reduces demo/fallback verification noise.
    */
   idleMqttProbeIntervalMs?: number;
+  /**
+   * Treat an open MQTT transport as usable before the first heartbeat pong.
+   * The demo enables this so the MQTT fallback is available immediately after
+   * the encrypted handshake instead of waiting for a probe race.
+   */
+  assumeMqttReachableOnOpen?: boolean;
 }
 
 interface PendingPing {
@@ -73,6 +79,7 @@ export class TransportManager {
   private readonly security: SessionSecurity;
   private readonly limits: HeartbeatLimits & Pick<P2PLinkLimits, "maxFrameBytes">;
   private readonly idleMqttProbeIntervalMs: number;
+  private readonly assumeMqttReachableOnOpen: boolean;
   private readonly logger: Logger;
   private readonly now: () => number;
   private readonly idFactory: () => string;
@@ -119,6 +126,7 @@ export class TransportManager {
       maxFrameBytes: options.limits?.maxFrameBytes ?? DEFAULT_LIMITS.maxFrameBytes,
     };
     this.idleMqttProbeIntervalMs = options.idleMqttProbeIntervalMs ?? 15_000;
+    this.assumeMqttReachableOnOpen = options.assumeMqttReachableOnOpen ?? false;
     this.logger = options.logger ?? noopLogger;
     this.now = options.now ?? (() => Date.now());
     this.idFactory = options.idFactory ?? randomId;
@@ -328,6 +336,11 @@ export class TransportManager {
         health.lastPongAt = 0;
         health.lastProbeAt = 0;
         health.decryptFailures = 0;
+        if (kind === "mqtt" && this.assumeMqttReachableOnOpen) {
+          // MQTT is a connected broker session; do not wait for the first
+          // ping/pong before exposing the fallback route.
+          health.lastPongAt = this.now();
+        }
         this.logger.info("transport opened", { transport: kind });
         if (!(kind === "mqtt" && this.active === "webrtc")) this.sendPing(kind);
       }

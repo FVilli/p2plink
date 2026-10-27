@@ -308,6 +308,7 @@ export class PairSession {
         maxFrameBytes: MAX_FRAME_BYTES,
       },
       idleMqttProbeIntervalMs: 0,
+      assumeMqttReachableOnOpen: true,
       logger: this.ctx.logger,
       onUnhealthy: (kind) => {
         if (kind === "webrtc") this.restartWebRtc("unhealthy");
