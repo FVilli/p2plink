@@ -19,15 +19,35 @@
           <h1>P2PLink Mesh <span id="app-version" class="version"></span></h1>
           <p>Browser peer network</p>
         </div>
-        <span id="broker-state" data-connected="false">Broker: connecting</span>
+        <span id="broker-state" data-connected="false">⚪ MQTT</span>
       </header>
       <section class="self">
-        <strong>Self peer</strong><span id="self-peer">Starting…</span>
-      </section>
-      <section class="controls">
-        <label><input id="toggle-p2p" type="checkbox" checked disabled /> P2P abilitato</label
-        ><button id="reset-stats" type="button">Reset stats</button
-        ><button id="edit-config" type="button" disabled>Impostazioni</button>
+        <div class="self-identity">
+          <strong>Self peer</strong>
+          <span id="self-peer">Starting…</span>
+        </div>
+        <div class="self-actions">
+          <button
+            id="edit-config"
+            class="icon-button"
+            type="button"
+            title="Impostazioni"
+            aria-label="Impostazioni"
+            disabled
+          >
+            ⚙️
+          </button>
+          <button
+            id="reset-stats"
+            class="icon-button"
+            type="button"
+            title="Reset statistiche"
+            aria-label="Reset statistiche"
+            disabled
+          >
+            ↺
+          </button>
+        </div>
       </section>
       <section id="config-panel" class="config" hidden>
         <form id="config-form">

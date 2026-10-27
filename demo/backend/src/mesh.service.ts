@@ -12,7 +12,7 @@ export class MeshService implements OnModuleInit, OnApplicationShutdown {
     password: process.env.MQTT_PASSWORD ?? "",
     name: process.env.PEER_NAME ?? `nest-${crypto.randomUUID().slice(0, 6)}`,
     kind: "nest",
-    version: process.env.APP_VERSION ?? "0.1.0",
+    version: process.env.APP_VERSION ?? "0.2.0",
     platform: `${process.platform}/${process.arch}`,
     presenceIntervalMs: (() => {
       const configured = Number(process.env.PRESENCE_INTERVAL_MS ?? 30_000);

@@ -221,6 +221,27 @@ try {
   );
   console.log("2. peer discovery: two browsers and two NestJS peers visible");
 
+  const ui = await pageA.evaluate(() => ({
+    broker: document.querySelector("#broker-state")?.textContent?.trim() ?? "",
+    totals: document.querySelector("#totals")?.textContent ?? "",
+    toggle: Boolean(document.querySelector("#toggle-p2p")),
+    settings: Boolean(document.querySelector("#edit-config")),
+    reset: Boolean(document.querySelector("#reset-stats")),
+  }));
+  if (ui.toggle) throw new Error("removed P2P toggle is still present");
+  if (!ui.broker.includes("MQTT") || ui.broker.includes("Broker")) {
+    throw new Error(`unexpected broker label: ${ui.broker}`);
+  }
+  if (
+    !ui.totals.includes("Peers") ||
+    !ui.totals.includes("Outbound") ||
+    !ui.totals.includes("Inbound")
+  ) {
+    throw new Error(`unexpected totals layout: ${ui.totals}`);
+  }
+  if (!ui.settings || !ui.reset) throw new Error("self actions are missing");
+  console.log("2b. UI uses MQTT-only status, self actions and outbound/inbound totals");
+
   await pageA.waitForFunction(
     () =>
       [...document.querySelectorAll("#peers tbody tr")].length >= 3 &&
@@ -288,7 +309,7 @@ try {
   console.log("5. NestJS console/mesh stats show P2P traffic", backendStats.totals);
 
   const mqttBefore = (await peerRows(pageA)).reduce((sum, row) => sum + row.mqttBytes, 0);
-  await pageA.click("#toggle-p2p");
+  await pageA.evaluate(() => window.__P2PLINK_DEMO_TEST__?.setWebRtcEnabled(false));
   await pageA.waitForFunction(
     () =>
       [...document.querySelectorAll("#peers tbody tr")].some(
@@ -309,7 +330,7 @@ try {
   );
   console.log("6. forced fallback: ping bytes now transit on MQTT");
 
-  await pageA.click("#toggle-p2p");
+  await pageA.evaluate(() => window.__P2PLINK_DEMO_TEST__?.setWebRtcEnabled(true));
   await pageA.waitForFunction(
     () =>
       [...document.querySelectorAll("#peers tbody tr")].some(
@@ -333,6 +354,17 @@ try {
     { timeout: 15_000 },
   );
   console.log("7b. MQTT issue published from browser A and received by browser B");
+
+  let dialogMessage = "";
+  pageA.once("dialog", async (dialog) => {
+    dialogMessage = dialog.message();
+    await dialog.accept();
+  });
+  await pageA.click("#reset-stats");
+  if (!dialogMessage.includes("Azzerare")) {
+    throw new Error(`unexpected reset confirmation: ${dialogMessage}`);
+  }
+  console.log("7c. reset icon asks for confirmation");
 
   const contextC = await browser.newContext();
   const pageC = await contextC.newPage();
@@ -383,7 +415,7 @@ try {
     throw new Error("offline banner not visible after offline reload");
   }
   const pwaVersion = await pwaPage.locator("#app-version").innerText();
-  if (!pwaVersion.startsWith("v")) throw new Error(`missing app version: ${pwaVersion}`);
+  if (pwaVersion !== "v0.2.0") throw new Error(`unexpected app version: ${pwaVersion}`);
   await pwaContext.close();
   console.log("9. PWA opens offline from service worker cache and shows offline banner/version");
 

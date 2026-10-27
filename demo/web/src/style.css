@@ -16,7 +16,6 @@ main {
 }
 header,
 .self,
-.controls,
 .totals {
   display: flex;
   align-items: center;
@@ -33,7 +32,6 @@ header p {
 }
 #broker-state,
 .self,
-.controls,
 .totals {
   padding: 16px;
   background: #1a2230;
@@ -43,13 +41,25 @@ header p {
 .self {
   margin: 16px 0;
 }
-.controls {
-  justify-content: flex-start;
-}
-.controls label {
+.self-identity {
   display: flex;
-  gap: 9px;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.self-identity strong {
+  color: #aab8ca;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.self-identity span {
+  overflow-wrap: anywhere;
+}
+.self-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
 }
 button {
   background: #426de0;
@@ -59,10 +69,69 @@ button {
   padding: 9px 15px;
   cursor: pointer;
 }
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  background: #26344a;
+  border: 1px solid #3d4d66;
+  font-size: 18px;
+  line-height: 1;
+}
+.icon-button:hover:not(:disabled) {
+  background: #334764;
+}
 .totals {
   margin: 16px 0;
+  align-items: stretch;
   justify-content: flex-start;
   flex-wrap: wrap;
+}
+.totals-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  padding-right: 24px;
+  border-right: 1px solid #303b4c;
+}
+.totals-block:last-child {
+  border-right: 0;
+}
+.metric-label {
+  color: #aab8ca;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.metric-value {
+  display: block;
+  font-size: 26px;
+  line-height: 1.1;
+}
+.traffic-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+.traffic-line > span:first-child {
+  width: 38px;
+  color: #9aa8ba;
+}
+.traffic-line > strong {
+  font-size: 14px;
+}
+.traffic-line .traffic-bytes {
+  color: #aab8ca;
 }
 .table-wrap {
   overflow-x: auto;

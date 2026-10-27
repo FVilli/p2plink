@@ -24,7 +24,6 @@ interface DemoConfig {
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const broker = byId<HTMLSpanElement>("broker-state");
 const self = byId<HTMLSpanElement>("self-peer");
-const toggle = byId<HTMLInputElement>("toggle-p2p");
 const body = document.querySelector<HTMLTableSectionElement>("#peers tbody")!;
 const errorBox = byId<HTMLDivElement>("error");
 const totals = byId<HTMLDivElement>("totals");
@@ -36,6 +35,7 @@ const passwordInput = byId<HTMLInputElement>("broker-password");
 const nameInput = byId<HTMLInputElement>("client-name");
 const configError = byId<HTMLParagraphElement>("config-error");
 const editConfigButton = byId<HTMLButtonElement>("edit-config");
+const resetButton = byId<HTMLButtonElement>("reset-stats");
 const offlineBanner = byId<HTMLDivElement>("offline-banner");
 const appVersion = byId<HTMLSpanElement>("app-version");
 const issuesSection = byId<HTMLElement>("issues");
@@ -63,12 +63,22 @@ let peer: MeshPeer | null = null;
 let currentConfig: DemoConfig | null = null;
 let lastConfig: DemoConfig | null = null;
 
+// Test/debug hook: the visible P2P toggle was removed from the UI.
+(
+  window as typeof window & {
+    __P2PLINK_DEMO_TEST__?: { setWebRtcEnabled: (enabled: boolean) => void };
+  }
+).__P2PLINK_DEMO_TEST__ = {
+  setWebRtcEnabled: (enabled) => peer?.setWebRtcEnabled(enabled),
+};
+
 const cell = (value: unknown) => {
   const td = document.createElement("td");
   td.textContent = String(value ?? "—");
   return td;
 };
 const number = (value: number | null) => (value === null ? "—" : value.toFixed(1));
+const ISSUE_TTL_MS = 60_000;
 const routeLabel = (route: PeerStats["route"]) =>
   route === "p2p" ? "🟢 p2p" : route === "mqtt" ? "🟡 mqtt" : "⏳ connecting";
 const issueContext = (extra: Record<string, string | number | boolean> = {}) => ({
@@ -79,7 +89,9 @@ const issueContext = (extra: Record<string, string | number | boolean> = {}) => 
   ...extra,
 });
 
-function renderIssues(issues: MeshIssue[]): void {
+function renderIssues(allIssues: MeshIssue[]): void {
+  const now = Date.now();
+  const issues = allIssues.filter((issue) => now - issue.ts < ISSUE_TTL_MS);
   issuesSection.hidden = issues.length === 0;
   issueList.replaceChildren(
     ...issues.slice(0, 12).map((issue) => {
@@ -101,15 +113,75 @@ function renderIssues(issues: MeshIssue[]): void {
   );
 }
 
+function trafficLine(label: string, messages: number, bytes: number): HTMLDivElement {
+  const line = document.createElement("div");
+  line.className = "traffic-line";
+  const name = document.createElement("span");
+  name.textContent = label;
+  const count = document.createElement("strong");
+  count.textContent = `${messages} msg`;
+  const size = document.createElement("span");
+  size.className = "traffic-bytes";
+  size.textContent = `${bytes} B`;
+  line.append(name, count, size);
+  return line;
+}
+
+function totalsBlock(label: string): { block: HTMLDivElement; value: HTMLElement } {
+  const block = document.createElement("div");
+  block.className = "totals-block";
+  const heading = document.createElement("span");
+  heading.className = "metric-label";
+  heading.textContent = label;
+  const value = document.createElement("div");
+  block.append(heading, value);
+  return { block, value };
+}
+
+function renderTotals(snapshot: MeshSnapshot): void {
+  const peers = totalsBlock("👥 Peers");
+  const peersValue = document.createElement("strong");
+  peersValue.className = "metric-value";
+  peersValue.textContent = String(snapshot.totals.peers);
+  peers.value.append(peersValue);
+
+  const outbound = totalsBlock("📤 Outbound");
+  outbound.value.append(
+    trafficLine(
+      "P2P",
+      snapshot.totals.traffic.tx.p2p.messages,
+      snapshot.totals.traffic.tx.p2p.bytes,
+    ),
+    trafficLine(
+      "MQTT",
+      snapshot.totals.traffic.tx.mqtt.messages,
+      snapshot.totals.traffic.tx.mqtt.bytes,
+    ),
+  );
+
+  const inbound = totalsBlock("📥 Inbound");
+  inbound.value.append(
+    trafficLine(
+      "P2P",
+      snapshot.totals.traffic.rx.p2p.messages,
+      snapshot.totals.traffic.rx.p2p.bytes,
+    ),
+    trafficLine(
+      "MQTT",
+      snapshot.totals.traffic.rx.mqtt.messages,
+      snapshot.totals.traffic.rx.mqtt.bytes,
+    ),
+  );
+
+  totals.replaceChildren(peers.block, outbound.block, inbound.block);
+}
+
 function render(snapshot: MeshSnapshot): void {
   broker.dataset.connected = String(snapshot.brokerConnected);
-  broker.textContent = snapshot.brokerConnected
-    ? "🟢 Broker: connected"
-    : "🔴 Broker: disconnected";
-  self.textContent = `🪪 ${snapshot.self.name} (${snapshot.self.peerId})`;
+  broker.textContent = snapshot.brokerConnected ? "🟢 MQTT" : "🔴 MQTT";
+  self.textContent = `${snapshot.self.name} (${snapshot.self.peerId})`;
   appVersion.textContent = `v${snapshot.self.version}`;
-  toggle.checked = snapshot.webRtcEnabled;
-  totals.innerHTML = `<span>👥 Peers: ${snapshot.totals.peers}</span><span>📤📥 P2P: ${snapshot.totals.p2pMessages} msg / ${snapshot.totals.p2pBytes} B (${number(snapshot.totals.p2pBytesPerSec)} B/s)</span><span>📤📥 MQTT: ${snapshot.totals.mqttMessages} msg / ${snapshot.totals.mqttBytes} B (${number(snapshot.totals.mqttBytesPerSec)} B/s)</span>`;
+  renderTotals(snapshot);
   body.replaceChildren(
     ...snapshot.peers.map((p: PeerStats) => {
       const tr = document.createElement("tr");
@@ -219,8 +291,8 @@ function showConfigPanel(config?: DemoConfig | null, message?: string): void {
   fillForm(initial);
   configPanel.hidden = false;
   configError.textContent = message ?? "";
-  toggle.disabled = true;
   editConfigButton.disabled = true;
+  resetButton.disabled = true;
   usernameInput.focus();
 }
 
@@ -249,13 +321,13 @@ async function stopPeer(): Promise<void> {
   const current = peer;
   peer = null;
   if (current) await current.stop().catch(() => undefined);
-  toggle.disabled = true;
   editConfigButton.disabled = true;
+  resetButton.disabled = true;
   body.replaceChildren();
   totals.textContent = "";
   broker.dataset.connected = "false";
-  broker.textContent = "🔴 Broker: disconnected";
-  self.textContent = "🪪 Not connected";
+  broker.textContent = "🔴 MQTT";
+  self.textContent = "Not connected";
 }
 
 async function connect(config: DemoConfig): Promise<void> {
@@ -291,14 +363,14 @@ async function connect(config: DemoConfig): Promise<void> {
   });
   peer = mesh;
   mesh.onSnapshot(render);
-  toggle.disabled = false;
   editConfigButton.disabled = false;
+  resetButton.disabled = false;
   try {
     await mesh.start();
   } catch (error) {
     peer = null;
-    toggle.disabled = true;
     editConfigButton.disabled = true;
+    resetButton.disabled = true;
     errorBox.hidden = false;
     errorBox.textContent = `Connessione fallita: ${error instanceof Error ? error.message : String(error)}`;
     void mesh.reportIssue(
@@ -335,9 +407,9 @@ editConfigButton.addEventListener("click", () => {
 function updateOnlineState(): void {
   const offline = !navigator.onLine;
   offlineBanner.hidden = !offline;
-  if (offline && !peer) {
+  if (offline) {
     broker.dataset.connected = "false";
-    broker.textContent = "⚪ Broker: offline";
+    broker.textContent = "⚪ MQTT";
   }
 }
 
@@ -380,8 +452,12 @@ window.addEventListener("securitypolicyviolation", (event) => {
   );
 });
 
-toggle.addEventListener("change", () => peer?.setWebRtcEnabled(toggle.checked));
-byId<HTMLButtonElement>("reset-stats").addEventListener("click", () => peer?.resetStats());
+resetButton.addEventListener("click", () => {
+  if (!peer) return;
+  if (window.confirm("Azzerare i contatori e le statistiche di tutti i peer?")) {
+    peer.resetStats();
+  }
+});
 
 const runtimeConfig: DemoConfig | null =
   runtimeString("url") && runtimeString("username") && runtimeString("password")

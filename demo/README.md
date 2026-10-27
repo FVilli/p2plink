@@ -41,6 +41,15 @@ p2plink-demo/v2/issues/{peerId}
 
 Il namespace è passato a `v2` per isolare le vecchie schede che pubblicavano presence ogni 2 secondi.
 
+## UI
+
+- lo stato in alto mostra solo `🟢 MQTT` / `🔴 MQTT` / `⚪ MQTT`;
+- `Self peer` mostra nome/ID a sinistra e, a destra, le icone `⚙️` impostazioni e `↺` reset;
+- il reset chiede conferma prima di azzerare i contatori;
+- il riepilogo mostra `Peers` senza due punti, con il numero in grassetto sotto, poi `Outbound` e `Inbound` con P2P e MQTT;
+- i problemi recenti scompaiono automaticamente dopo 60 secondi;
+- l'app demo usa la versione `0.2.0`.
+
 ## PWA e offline
 
 La web app è una PWA installabile:
@@ -174,6 +183,7 @@ La password viene gestita dall'onboarding, non da una variabile di build.
 | `MQTT_URL`             | `mqtts://mqtt.fvsg.it:8883`    | URL broker                                             |
 | `MQTT_USERNAME`        | `main:rmq-usr`                 | username broker                                        |
 | `MQTT_PASSWORD`        | —                              | password broker, obbligatoria                          |
+| `APP_VERSION`          | `0.2.0`                        | versione mostrata nella presence/console               |
 | `PING_BYTES`           | `2048`                         | dimensione random payload ping                         |
 | `PRESENCE_INTERVAL_MS` | `30000`                        | intervallo presence; minimo 1000 ms                    |
 | `STUN_URLS`            | `stun:stun.l.google.com:19302` | STUN demo, separati da virgola; vuoto per disabilitare |
@@ -192,7 +202,7 @@ Le app non hanno un URL di server applicativo: conoscono solo broker e credenzia
 - **p2p B/s / mqtt B/s**: rate su finestra mobile di 2 secondi;
 - **pings / OK**: ping inviati e round-trip completati con hash valido;
 - **Version**: versione dichiarata dal peer nella presence;
-- **route/status**: emoji `🟢 p2p`, `🟡 mqtt`, `⏳ connecting`, `🟢/🔴 Broker` per rendere immediata la lettura della sezione connected.
+- **route/status**: emoji `🟢 p2p`, `🟡 mqtt`, `⏳ connecting`, `🟢/🔴 MQTT` per rendere immediata la lettura della sezione connected.
 
 I byte e i messaggi delle richieste e delle risposte sono contati sul peer che li invia e sul peer che li riceve. I heartbeat interni di P2PLink non sono conteggiati.
 
@@ -228,11 +238,9 @@ Il ricevente verifica lunghezza e SHA-256, poi restituisce gli stessi byte e has
 
 Il trasporto effettivo è noto perché `TransportManager.send()` restituisce il trasporto usato e `onEnvelope` espone il trasporto su cui è arrivata la risposta.
 
-## Toggle P2P
+## Forzare il fallback MQTT
 
-Il pulsante **P2P abilitato** chiude i DataChannel del peer locale e lascia attivo il fallback MQTT. I ping successivi passano dal broker e le colonne MQTT aumentano. Riattivandolo, il mesh rinegozia WebRTC con backoff.
-
-Da terminale, il backend può essere avviato con `WEBRTC_ENABLED=false` per lo stesso effetto.
+Il toggle P2P è stato rimosso dalla UI. Per una prova di fallback si può avviare un backend con `WEBRTC_ENABLED=false`, oppure usare l'hook di test della suite E2E. I ping successivi passano dal broker e le colonne MQTT aumentano.
 
 ## Docker / GHCR
 

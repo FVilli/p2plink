@@ -31,6 +31,7 @@ import type {
 
 const MAX_PING_BYTES = 60_000;
 const MAX_FRAME_BYTES = 262_144;
+const ISSUE_TTL_MS = 60_000;
 
 const consoleLogger: Logger = {
   debug: (message, meta) => console.debug(`[mesh] ${message}`, meta ?? ""),
@@ -339,6 +340,16 @@ class MeshImpl implements MeshPeer {
       });
     } finally {
       await connection?.close().catch(() => undefined);
+    }
+  }
+
+  private pruneIssues(now: number): void {
+    for (let index = this.recentIssues.length - 1; index >= 0; index -= 1) {
+      const issue = this.recentIssues[index];
+      if (issue && now - issue.ts >= ISSUE_TTL_MS) {
+        this.recentIssues.splice(index, 1);
+        this.issueIds.delete(issue.id);
+      }
     }
   }
 
@@ -665,6 +676,7 @@ class MeshImpl implements MeshPeer {
 
   private emitSnapshot(): void {
     const now = Date.now();
+    this.pruneIssues(now);
     const peers: PeerStats[] = [];
     for (const peer of this.peers.values()) {
       const pair = this.pairs.get(peer.peerId);
