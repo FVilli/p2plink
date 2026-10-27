@@ -1,0 +1,144 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum PeerStatus {
+  ACTIVE
+  DISABLED
+  REVOKED
+}
+
+enum GrantStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+  REVOKED
+}
+
+enum RevocationStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id           String        @id @default(uuid()) @db.Uuid
+  username     String        @unique
+  passwordHash String
+  role         UserRole      @default(USER)
+  status       UserStatus    @default(ACTIVE)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  peers        Peer[]
+  sessions     Session[]
+  invitations  Invitation[]
+}
+
+model Invitation {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Peer {
+  id                  String       @id @default(uuid()) @db.Uuid
+  peerId              String       @unique
+  userId              String       @db.Uuid
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                String
+  publicKeyJwk        Json
+  fingerprint         String
+  status              PeerStatus   @default(ACTIVE)
+  certificate         String?
+  certificateSerial   String?      @unique
+  certificateExpiresAt DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  sessions            Session[]
+  grant               BrokerGrant?
+  revocations         Revocation[]
+  challenges          PeerChallenge[]
+
+  @@unique([userId, fingerprint])
+  @@index([userId])
+}
+
+model PeerChallenge {
+  id        String   @id @default(uuid()) @db.Uuid
+  peerId    String?  @db.Uuid
+  peer      Peer?    @relation(fields: [peerId], references: [id], onDelete: Cascade)
+  userId    String?  @db.Uuid
+  nonce     String
+  nonceHash String   @unique
+  purpose   String
+  publicKeyJwk Json?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  peerId    String?  @db.Uuid
+  peer      Peer?    @relation(fields: [peerId], references: [id], onDelete: SetNull)
+  familyId  String   @db.Uuid
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+model BrokerGrant {
+  id           String      @id @default(uuid()) @db.Uuid
+  peerId       String      @unique @db.Uuid
+  peer         Peer        @relation(fields: [peerId], references: [id], onDelete: Cascade)
+  mqttUsername String      @unique
+  expiresAt    DateTime
+  status       GrantStatus @default(PENDING)
+  lastSyncedAt DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model Revocation {
+  id          String           @id @default(uuid()) @db.Uuid
+  peerId      String           @db.Uuid
+  peer        Peer             @relation(fields: [peerId], references: [id], onDelete: Cascade)
+  serial      String
+  reason      String
+  status      RevocationStatus @default(PENDING)
+  event       Json?
+  requestedAt DateTime         @default(now())
+  completedAt DateTime?
+
+  @@unique([peerId, serial])
+  @@index([status])
+}

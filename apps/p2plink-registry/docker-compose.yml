@@ -1,0 +1,93 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: p2plink_registry
+      POSTGRES_USER: registry
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - registry-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U registry -d p2plink_registry"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  registry:
+    build:
+      context: ../..
+      dockerfile: apps/p2plink-registry/Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3200
+      DATABASE_URL: postgresql://registry:${POSTGRES_PASSWORD}@postgres:5432/p2plink_registry
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      REGISTRY_PUBLIC_URL: ${REGISTRY_PUBLIC_URL:-http://localhost:3200}
+      REGISTRY_KEY_FILE: /data/registry-key.json
+      MQTT_PUBLIC_URL: ${MQTT_PUBLIC_URL:-ws://localhost:9001}
+      MQTT_ADMIN_URL: mqtt://mosquitto:1883
+      MQTT_ADMIN_USERNAME: ${MQTT_ADMIN_USERNAME:-admin}
+      MQTT_ADMIN_PASSWORD: ${MQTT_ADMIN_PASSWORD:?set MQTT_ADMIN_PASSWORD}
+      MQTT_PEER_ROLE: ${MQTT_PEER_ROLE:-peer}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?set SEED_ADMIN_PASSWORD}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5174}
+    ports:
+      - "3200:3200"
+    volumes:
+      - registry-data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      registry-migrate:
+        condition: service_completed_successfully
+      registry-seed:
+        condition: service_completed_successfully
+      mosquitto:
+        condition: service_started
+
+  registry-migrate:
+    build:
+      context: ../..
+      dockerfile: apps/p2plink-registry/Dockerfile
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://registry:${POSTGRES_PASSWORD}@postgres:5432/p2plink_registry
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  registry-seed:
+    build:
+      context: ../..
+      dockerfile: apps/p2plink-registry/Dockerfile
+    command: ["node", "dist/seed.js"]
+    environment:
+      DATABASE_URL: postgresql://registry:${POSTGRES_PASSWORD}@postgres:5432/p2plink_registry
+      SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-admin}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?set SEED_ADMIN_PASSWORD}
+      SEED_DEMO_USERNAME: ${SEED_DEMO_USERNAME:-demo}
+      SEED_DEMO_PASSWORD: ${SEED_DEMO_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      registry-migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    ports:
+      # Only the browser-facing WebSocket listener is published.
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - broker-data:/mosquitto/data
+    environment:
+      MOSQUITTO_DYNSEC_PASSWORD: ${MQTT_ADMIN_PASSWORD:?set MQTT_ADMIN_PASSWORD}
+    restart: unless-stopped
+
+volumes:
+  registry-db:
+  registry-data:
+  broker-data:

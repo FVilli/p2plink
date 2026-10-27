@@ -36,11 +36,12 @@ Requisiti: Node.js >= 22, pnpm 10 e Docker per il broker di test. I pacchetti no
 
 Pacchetti principali:
 
-| Pacchetto                                                                 | Ruolo                                          |
-| ------------------------------------------------------------------------- | ---------------------------------------------- |
-| `@p2plink/client` / `@p2plink/server`                                     | API applicativa, bootstrap e gestione sessione |
-| `@p2plink/core` / `@p2plink/crypto` / `@p2plink/mqtt` / `@p2plink/webrtc` | Protocollo, sicurezza e trasporti              |
-| `@p2plink/angular` / `@p2plink/nestjs`                                    | Integrazioni framework                         |
+| Pacchetto                                                                 | Ruolo                                                      |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `@p2plink/client` / `@p2plink/server`                                     | API applicativa, bootstrap e gestione sessione             |
+| `@p2plink/core` / `@p2plink/crypto` / `@p2plink/mqtt` / `@p2plink/webrtc` | Protocollo, sicurezza e trasporti                          |
+| `@p2plink/angular` / `@p2plink/nestjs`                                    | Integrazioni framework                                     |
+| `p2plink-registry`                                                        | Servizio opzionale per identità, certificati e utenze MQTT |
 
 ## Quick start
 
@@ -251,6 +252,7 @@ La mesh demo mostra discovery, ping con verifica SHA-256, traffico P2P/MQTT e fa
 - [NestJS](docs/nestjs.md)
 - [Broker MQTT](docs/broker.md)
 - [Test](docs/testing.md)
+- [Registry](apps/p2plink-registry/README.md)
 
 ## Cosa P2PLink non è
 

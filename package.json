@@ -22,7 +22,11 @@
     "pack:check": "pnpm build && for p in core crypto mqtt webrtc client server nestjs; do (cd packages/$p && npm pack --dry-run); done && (cd packages/angular/dist && npm pack --dry-run)",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json --noEmit",
     "demo:build": "pnpm -w build && pnpm --dir demo install && pnpm --dir demo build",
-    "demo:e2e": "pnpm --dir demo e2e"
+    "demo:e2e": "pnpm --dir demo e2e",
+    "registry:build": "pnpm --filter p2plink-registry build",
+    "registry:test": "pnpm --filter p2plink-registry test",
+    "registry:typecheck": "pnpm --filter p2plink-registry typecheck",
+    "registry:dev": "pnpm --filter p2plink-registry dev"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
@@ -45,8 +49,12 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "argon2",
       "esbuild",
-      "node-datachannel"
+      "node-datachannel",
+      "prisma"
     ]
   }
 }

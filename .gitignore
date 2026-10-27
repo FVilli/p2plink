@@ -20,3 +20,5 @@ examples/**/dist/
 examples/**/.data/
 
 .firebase/
+
+apps/p2plink-registry/data/

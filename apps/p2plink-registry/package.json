@@ -1,0 +1,47 @@
+{
+  "name": "p2plink-registry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "prisma generate && tsc -p tsconfig.json",
+    "dev": "tsx watch src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "prisma generate && tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:seed:prod": "node dist/seed.js"
+  },
+  "dependencies": {
+    "@nestjs/common": "^12.3.2",
+    "@nestjs/config": "^12.0.1",
+    "@nestjs/core": "^12.3.2",
+    "@nestjs/jwt": "^12.0.3",
+    "@nestjs/platform-fastify": "^12.3.2",
+    "@p2plink/crypto": "workspace:*",
+    "@prisma/client": "^6.19.3",
+    "argon2": "^0.45.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "jose": "^6.2.13",
+    "mqtt": "^5.16.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^12.3.2",
+    "@types/node": "^24.19.2",
+    "@types/supertest": "^6.0.3",
+    "prisma": "^6.19.3",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
