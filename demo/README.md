@@ -170,10 +170,11 @@ Da terminale, il backend può essere avviato con `WEBRTC_ENABLED=false` per lo s
 
 ## Docker / GHCR
 
-Immagine backend basata su `node:24-alpine`:
+Immagine backend basata su `node:24-alpine`, pubblicata su GHCR:
 
 ```bash
-docker build -f demo/backend/Dockerfile -t p2plink-demo .
+docker pull ghcr.io/fvilli/p2plink-demo:latest
+docker build -f demo/backend/Dockerfile -t p2plink-demo .   # build locale
 ```
 
 Il workflow `.github/workflows/demo-image.yml` pubblica:
