@@ -20,7 +20,11 @@ describe("MemoryIdempotencyStore", () => {
     await store.claim("k", 100);
     await store.release("k");
     expect(await store.claim("k", 100)).toEqual({ status: "claimed" });
-    await store.complete("k", { ok: false, error: { code: "X", message: "x", retryable: false, outcomeUnknown: false } }, 100);
+    await store.complete(
+      "k",
+      { ok: false, error: { code: "X", message: "x", retryable: false, outcomeUnknown: false } },
+      100,
+    );
     vi.setSystemTime(new Date(200));
     expect(await store.claim("k", 100)).toEqual({ status: "claimed" });
     vi.useRealTimers();

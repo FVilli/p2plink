@@ -1,3 +1,4 @@
+/* eslint-disable prefer-const */
 import { describe, expect, it } from "vitest";
 import { randomBytes } from "@p2plink/core";
 import { WebRtcTransport } from "../webrtc-transport.js";
@@ -27,6 +28,7 @@ function waitForOpen(transport: WebRtcTransport, timeoutMs = 15_000): Promise<vo
 describe("WebRtcTransport with node-datachannel", () => {
   it("negotiates, chunks large frames and stays bidirectional", async () => {
     const engine = createNodeWebRtcEngine();
+    // Assigned after both signal callbacks are wired.
     let server: WebRtcTransport;
     let client: WebRtcTransport;
     const errors: unknown[] = [];

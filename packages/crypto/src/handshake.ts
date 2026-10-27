@@ -3,13 +3,11 @@ import {
   P2PLinkErrorCodes,
   canonicalJson,
   type JsonObject,
- 
   type ServerIdentityPin,
   type TransportKind,
 } from "@p2plink/core";
 import {
   fromBase64Url,
-  randomBytes,
   randomToken,
   sha256,
   sha256Base64Url,
@@ -233,9 +231,7 @@ export async function createServerHello(
     nonce: randomToken(32),
     issuedAt: (options.now ?? Date.now)(),
   };
-  const signature = await identity.sign(
-    utf8Encode(DOMAIN_SERVER_HELLO + canonicalJson(hello)),
-  );
+  const signature = await identity.sign(utf8Encode(DOMAIN_SERVER_HELLO + canonicalJson(hello)));
   const signed: SignedServerHello = { ...hello, signature: toBase64Url(signature) };
   return {
     hello: signed,
@@ -301,7 +297,9 @@ export async function completeClientHandshake(
   return deriveSession(expected, hello, shared);
 }
 
-export async function completeServerHandshake(state: ServerHandshakeState): Promise<DerivedSession> {
+export async function completeServerHandshake(
+  state: ServerHandshakeState,
+): Promise<DerivedSession> {
   if (!state.ephemeralPrivateKey || !state.serverHello) {
     throw new P2PLinkError(P2PLinkErrorCodes.INVALID_CONFIG, "Server hello has not been created");
   }
@@ -327,13 +325,15 @@ async function deriveSession(
   serverHello: SignedServerHello,
   shared: Uint8Array,
 ): Promise<DerivedSession> {
-  const transcript = utf8Encode(
-    DOMAIN_TRANSCRIPT + canonicalJson({ clientHello, serverHello }),
-  );
+  const transcript = utf8Encode(DOMAIN_TRANSCRIPT + canonicalJson({ clientHello, serverHello }));
   const salt = await sha256(transcript);
-  const baseKey = await globalThis.crypto.subtle.importKey("raw", shared as BufferSource, "HKDF", false, [
-    "deriveBits",
-  ]);
+  const baseKey = await globalThis.crypto.subtle.importKey(
+    "raw",
+    shared as BufferSource,
+    "HKDF",
+    false,
+    ["deriveBits"],
+  );
   const keys: SessionKeys = {
     mqtt: await deriveDirectionalKeys(baseKey, salt, clientHello.sessionId, "mqtt"),
     webrtc: await deriveDirectionalKeys(baseKey, salt, clientHello.sessionId, "webrtc"),

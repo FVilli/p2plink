@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - name: Start Mosquitto
+        run: |
+          docker compose -f deployment/mosquitto/docker-compose.yml up -d
+          for i in $(seq 1 30); do
+            if docker exec p2plink-mosquitto mosquitto_pub -h 127.0.0.1 -u p2plink-server -P server-dev-password -t 'p2plink/v1/health/health/session/health/s2c' -m ok >/dev/null 2>&1; then exit 0; fi
+            sleep 1
+          done
+          docker logs p2plink-mosquitto
+          exit 1
+      - run: pnpm test
+      - name: Stop Mosquitto
+        if: always()
+        run: docker compose -f deployment/mosquitto/docker-compose.yml down -v
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Install Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Start Mosquitto
+        run: |
+          docker compose -f deployment/mosquitto/docker-compose.yml up -d
+          sleep 5
+      - name: Browser ↔ Node demo
+        run: |
+          pnpm --filter @p2plink/example-browser-node build
+          (pnpm --filter @p2plink/example-browser-node dev:server > /tmp/demo-server.log 2>&1 &)
+          (pnpm --filter @p2plink/example-browser-node preview > /tmp/demo-web.log 2>&1 &)
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8787/health >/dev/null && curl -sfI http://127.0.0.1:5173/ >/dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/browser-demo-check.mjs
+      - name: Angular ↔ NestJS demo
+        run: |
+          pnpm --filter @p2plink/example-angular-web build
+          pnpm --filter @p2plink/example-nest-server build
+          (pnpm --filter @p2plink/example-nest-server start > /tmp/nest.log 2>&1 &)
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:3000/debug/info >/dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/angular-demo-check.mjs
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: |
+            /tmp/demo-server.log
+            /tmp/demo-web.log
+            /tmp/nest.log
+            /tmp/p2plink-browser-demo-failure.png
+            /tmp/p2plink-angular-demo-failure.png
+          if-no-files-found: ignore
+      - name: Stop Mosquitto
+        if: always()
+        run: docker compose -f deployment/mosquitto/docker-compose.yml down -v
+
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Pack packages
+        run: |
+          mkdir -p /tmp/p2plink-packs
+          for pkg in core crypto mqtt webrtc client server nestjs; do
+            (cd packages/$pkg && npm pack --pack-destination /tmp/p2plink-packs)
+          done
+          (cd packages/angular/dist && npm pack --pack-destination /tmp/p2plink-packs)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-packages
+          path: /tmp/p2plink-packs/*.tgz

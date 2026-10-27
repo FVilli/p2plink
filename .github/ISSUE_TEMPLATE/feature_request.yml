@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose a focused improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Keep the scope within transport, signaling, fallback, session, security, RPC or events.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: textarea
+    id: security
+    attributes:
+      label: Security and compatibility impact
+    validations:
+      required: false

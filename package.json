@@ -4,29 +4,47 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.8.1",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "pnpm -r --filter './packages/**' build",
     "test": "pnpm -r --filter './packages/**' test",
-    "typecheck": "pnpm -r --filter './packages/**' typecheck",
+    "typecheck": "pnpm -r --filter \"./packages/**\" typecheck && tsc -p tsconfig.scripts.json --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "broker:up": "docker compose -f deployment/mosquitto/docker-compose.yml up -d",
-    "broker:down": "docker compose -f deployment/mosquitto/docker-compose.yml down -v"
+    "broker:down": "docker compose -f deployment/mosquitto/docker-compose.yml down -v",
+    "benchmark": "tsx scripts/benchmark.ts",
+    "test:e2e:browser": "node scripts/browser-demo-check.mjs",
+    "test:e2e:angular": "node scripts/angular-demo-check.mjs",
+    "pack:check": "pnpm build && for p in core crypto mqtt webrtc client server nestjs; do (cd packages/$p && npm pack --dry-run); done && (cd packages/angular/dist && npm pack --dry-run)",
+    "typecheck:scripts": "tsc -p tsconfig.scripts.json --noEmit"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@p2plink/client": "workspace:*",
+    "@p2plink/core": "workspace:*",
+    "@p2plink/crypto": "workspace:*",
+    "@p2plink/mqtt": "workspace:*",
+    "@p2plink/server": "workspace:*",
+    "@p2plink/webrtc": "workspace:*",
     "@playwright/test": "^1.64.1",
     "@types/node": "^24.19.2",
     "eslint": "^9.39.5",
     "mqtt": "^5.16.1",
     "prettier": "^3.9.10",
     "tsup": "^9.0.0",
+    "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.72.1",
     "vitest": "^5.0.5"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "node-datachannel"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "node-datachannel"
+    ]
   }
 }

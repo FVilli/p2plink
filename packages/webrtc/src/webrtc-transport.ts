@@ -6,7 +6,6 @@ import {
   type IceCandidateInit,
   type IceServer,
   type Logger,
-  type SessionDescriptionInit,
   type SignalPayload,
   type Transport,
   type TransportKind,
@@ -14,7 +13,12 @@ import {
   type Unsubscribe,
 } from "@p2plink/core";
 import { ChunkReassembler, encodeTransportPackets } from "./chunking.js";
-import type { DataChannelLike, PeerConnectionLike, PeerConnectionState, WebRtcEngine } from "./types.js";
+import type {
+  DataChannelLike,
+  PeerConnectionLike,
+  PeerConnectionState,
+  WebRtcEngine,
+} from "./types.js";
 
 export interface WebRtcTransportOptions {
   engine: WebRtcEngine;
@@ -182,9 +186,11 @@ export class WebRtcTransport implements Transport {
     }
     this.queuedBytes += data.length;
     const task = this.sendChain.then(() => this.sendInternal(data));
-    this.sendChain = task.catch(() => undefined).finally(() => {
-      this.queuedBytes -= data.length;
-    });
+    this.sendChain = task
+      .catch(() => undefined)
+      .finally(() => {
+        this.queuedBytes -= data.length;
+      });
     return task;
   }
 

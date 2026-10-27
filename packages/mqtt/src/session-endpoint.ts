@@ -8,6 +8,7 @@ import {
   validateSignalReset,
   type Logger,
   type SessionTopics,
+  type SignalReset,
   type TransportState,
   type Unsubscribe,
 } from "@p2plink/core";
@@ -31,7 +32,7 @@ export class MqttSessionEndpoint implements MqttFrameEndpoint {
   private readonly logger: Logger;
   private readonly handshakeListeners = new Set<(message: unknown) => void>();
   private readonly frameListeners = new Set<(frame: Uint8Array) => void>();
-  private readonly resetListeners = new Set<(reason: string) => void>();
+  private readonly resetListeners = new Set<(reset: SignalReset) => void>();
   private readonly unsubscribers: Unsubscribe[] = [];
   private started = false;
 
@@ -93,7 +94,7 @@ export class MqttSessionEndpoint implements MqttFrameEndpoint {
     return () => this.frameListeners.delete(listener);
   }
 
-  onReset(listener: (reason: string) => void): Unsubscribe {
+  onReset(listener: (reset: SignalReset) => void): Unsubscribe {
     this.resetListeners.add(listener);
     return () => this.resetListeners.delete(listener);
   }
@@ -114,6 +115,10 @@ export class MqttSessionEndpoint implements MqttFrameEndpoint {
     if (payload.length === 0) return;
     try {
       if (payload[0] === 0x01) {
+        if (payload.length > 32 * 1024) {
+          this.logger.warn("dropping oversized handshake", { size: payload.length });
+          return;
+        }
         const message = decodeHandshakeMessage(payload);
         for (const listener of this.handshakeListeners) listener(message);
       } else if (payload[0] === 0x02) {
@@ -131,11 +136,15 @@ export class MqttSessionEndpoint implements MqttFrameEndpoint {
   }
 
   private handleControlPayload(payload: Uint8Array): void {
+    if (payload.length > 4 * 1024) {
+      this.logger.warn("dropping oversized control message", { size: payload.length });
+      return;
+    }
     try {
       const value = JSON.parse(utf8Decode(payload)) as unknown;
       validateSignalReset(value);
       if (value.kind === "session-reset") {
-        for (const listener of this.resetListeners) listener(value.reason);
+        for (const listener of this.resetListeners) listener(value);
       }
     } catch (error) {
       this.logger.warn("invalid control payload", {

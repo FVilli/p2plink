@@ -28,8 +28,7 @@ export const P2PLinkErrorCodes = {
 } as const;
 
 export type P2PLinkErrorCode =
-  | (typeof P2PLinkErrorCodes)[keyof typeof P2PLinkErrorCodes]
-  | (string & {});
+  (typeof P2PLinkErrorCodes)[keyof typeof P2PLinkErrorCodes] | (string & {});
 
 export interface P2PLinkErrorOptions {
   retryable?: boolean;

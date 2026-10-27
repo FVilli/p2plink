@@ -1,8 +1,7 @@
 import type { SerializedError } from "./types.js";
 
 export type StoredRpcOutcome =
-  | { ok: true; payload: unknown }
-  | { ok: false; error: SerializedError };
+  { ok: true; payload: unknown } | { ok: false; error: SerializedError };
 
 export type IdempotencyClaim =
   | { status: "claimed" }

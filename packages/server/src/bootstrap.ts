@@ -117,9 +117,7 @@ export class BootstrapService {
         throw new P2PLinkError(P2PLinkErrorCodes.AUTH_FAILED, "Invalid client id");
       }
       validatePublicJwk(bootstrapRequest.identityPublicKey);
-      const identityFingerprint = await publicKeyFingerprint(
-        bootstrapRequest.identityPublicKey,
-      );
+      const identityFingerprint = await publicKeyFingerprint(bootstrapRequest.identityPublicKey);
       const ttlMs = this.options.capabilityTtlMs ?? 60_000;
       const { capability, claims } = await issueCapability(this.config.identity, {
         subject: authentication.subject,

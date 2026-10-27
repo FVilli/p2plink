@@ -6,8 +6,5 @@ export function createBrowserWebRtcEngine(): WebRtcEngine {
   if (typeof globalThis.RTCPeerConnection === "undefined") {
     throw new Error("WebRTC is not available in this runtime");
   }
-  return createNativeEngine(
-    "browser",
-    (config) => new globalThis.RTCPeerConnection(config),
-  );
+  return createNativeEngine("browser", (config) => new globalThis.RTCPeerConnection(config));
 }

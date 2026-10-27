@@ -1,0 +1,72 @@
+{
+  "measuredAt": "2026-10-27T00:05:38.169Z",
+  "environment": {
+    "node": "v24.19.0",
+    "platform": "linux 7.0.0-38-generic x64",
+    "cpu": "AMD RYZEN AI MAX+ 395 w/ Radeon 8060S",
+    "cores": 32,
+    "totalMemoryGB": 123,
+    "broker": "eclipse-mosquitto:2 (2.1.2), local Docker",
+    "serverStartMs": 30,
+    "transports": "loopback, no STUN/TURN"
+  },
+  "results": [
+    {
+      "clients": 1,
+      "connectAllMs": 181,
+      "connectMedianMs": 163,
+      "connectP95Ms": 163,
+      "p2pAllMs": 1883,
+      "rpcP2pAvgMs": 0.61,
+      "rpcP2pP95Ms": 1.38,
+      "rpcP2pWallMs": 3,
+      "rpcMqttAvgMs": 66.3,
+      "fallbackMs": 3,
+      "restoreMs": 4716,
+      "clientRssMB": 130,
+      "clientHeapUsedMB": 28,
+      "clientCpuPercent": 2.3,
+      "serverRssMB": 105,
+      "serverHeapUsedMB": 29,
+      "serverCpuPercent": 0.9
+    },
+    {
+      "clients": 10,
+      "connectAllMs": 177,
+      "connectMedianMs": 151,
+      "connectP95Ms": 174,
+      "p2pAllMs": 1862,
+      "rpcP2pAvgMs": 0.81,
+      "rpcP2pP95Ms": 1.22,
+      "rpcP2pWallMs": 4,
+      "rpcMqttAvgMs": 50.99,
+      "fallbackMs": 2,
+      "restoreMs": 4796,
+      "clientRssMB": 146,
+      "clientHeapUsedMB": 33,
+      "clientCpuPercent": 3,
+      "serverRssMB": 130,
+      "serverHeapUsedMB": 30,
+      "serverCpuPercent": 2.3
+    },
+    {
+      "clients": 100,
+      "connectAllMs": 252,
+      "connectMedianMs": 229,
+      "connectP95Ms": 247,
+      "p2pAllMs": 1869,
+      "rpcP2pAvgMs": 7.3,
+      "rpcP2pP95Ms": 11.22,
+      "rpcP2pWallMs": 39,
+      "rpcMqttAvgMs": 77.47,
+      "fallbackMs": 2,
+      "restoreMs": 5545,
+      "clientRssMB": 242,
+      "clientHeapUsedMB": 68,
+      "clientCpuPercent": 13.9,
+      "serverRssMB": 197,
+      "serverHeapUsedMB": 40,
+      "serverCpuPercent": 14.1
+    }
+  ]
+}

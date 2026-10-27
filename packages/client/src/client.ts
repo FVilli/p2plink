@@ -3,6 +3,8 @@ import {
   P2PLinkError,
   P2PLinkErrorCodes,
   TransportManager,
+  canonicalJson,
+  utf8Encode,
   createEnvelope,
   noopLogger,
   randomId,
@@ -14,7 +16,10 @@ import {
   type P2PLinkLimits,
   type RequestOptions,
   type RpcContract,
+  type RequestArgs,
+  type RpcResponse,
   type SignalPayload,
+  type SignalReset,
   type Unsubscribe,
   RpcClient,
   sessionTopics,
@@ -24,27 +29,26 @@ import {
   assertServerIdentity,
   completeClientHandshake,
   createClientHello,
+  fromBase64Url,
   generateIdentity,
   validatePublicJwk,
+  verifySignature,
 } from "@p2plink/crypto";
 import { MqttConnection, MqttSessionEndpoint, MqttTransport } from "@p2plink/mqtt";
-import {
-  WebRtcTransport,
-  createBrowserWebRtcEngine,
-  type WebRtcEngine,
-} from "@p2plink/webrtc";
+import { WebRtcTransport, createBrowserWebRtcEngine, type WebRtcEngine } from "@p2plink/webrtc";
 import type { P2PLinkClientConfig } from "./config.js";
 import { validateBootstrapResult } from "./bootstrap.js";
 
 export interface P2PLinkClient<C extends RpcContract, E extends EventContract> {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
+  /** Simulates a network/host suspension; pending calls fail and must be retried. */
+  suspend(): Promise<void>;
+  resume(): Promise<void>;
   request<K extends keyof C & string>(
     method: K,
-    ...args: C[K]["request"] extends void | undefined
-      ? [request?: C[K]["request"], options?: RequestOptions]
-      : [request: C[K]["request"], options?: RequestOptions]
-  ): Promise<C[K]["response"]>;
+    ...args: RequestArgs<C, K>
+  ): Promise<RpcResponse<C, K>>;
   on<K extends keyof E & string>(event: K, listener: (payload: E[K]) => void): Unsubscribe;
   getStatus(): ConnectionSnapshot;
   onStatus(listener: (snapshot: ConnectionSnapshot) => void): Unsubscribe;
@@ -77,9 +81,10 @@ interface HandshakeWaiter {
   timer: ReturnType<typeof setTimeout>;
 }
 
-export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
-  implements P2PLinkClient<C, E>
-{
+export class P2PLinkClientImpl<
+  C extends RpcContract,
+  E extends EventContract,
+> implements P2PLinkClient<C, E> {
   private readonly resolved: ResolvedConfig;
   private readonly defaultEngineFactory: (() => WebRtcEngine) | null;
   private identityValue: ClientIdentity | null = null;
@@ -91,13 +96,18 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
   private webrtcTransport: WebRtcTransport | null = null;
   private sessionId: string | null = null;
   private clientId: string | null = null;
+  private serverPublicKeyJwk: JsonWebKey | null = null;
+  private pendingHandshakeReject: ((error: P2PLinkError) => void) | null = null;
   private epoch = 0;
   private connectPromise: Promise<void> | null = null;
   private connected = false;
   private closed = false;
   private reconnecting = false;
+  private suspended = false;
   private lifecycleCleanup: Unsubscribe[] = [];
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private resetTimer: ReturnType<typeof setTimeout> | null = null;
+  private negotiationTimer: ReturnType<typeof setTimeout> | null = null;
   private retryAttempts = 0;
   private resetsInWindow: number[] = [];
   private readonly statusListeners = new Set<(snapshot: ConnectionSnapshot) => void>();
@@ -124,6 +134,7 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
 
   async connect(): Promise<void> {
     if (this.closed) this.closed = false;
+    this.suspended = false;
     if (this.connected) return;
     if (this.connectPromise) return this.connectPromise;
     this.connectPromise = this.doConnect().finally(() => {
@@ -135,7 +146,12 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
   async disconnect(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.suspended = false;
     this.connected = false;
+    if (this.resetTimer) {
+      clearTimeout(this.resetTimer);
+      this.resetTimer = null;
+    }
     this.reconnecting = false;
     this.clearLifecycle();
     await this.teardownSession();
@@ -151,12 +167,57 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
     });
   }
 
+  async suspend(): Promise<void> {
+    if (this.closed || this.suspended) return;
+    this.suspended = true;
+    this.connected = false;
+    if (this.resetTimer) {
+      clearTimeout(this.resetTimer);
+      this.resetTimer = null;
+    }
+    this.reconnecting = false;
+    this.clearLifecycle();
+    this.rpc?.failAll(
+      new P2PLinkError(
+        P2PLinkErrorCodes.OUTCOME_UNKNOWN,
+        "Client suspended; pending request outcome is unknown",
+        { retryable: true, outcomeUnknown: true },
+      ),
+    );
+    await this.teardownSession();
+    this.sessionId = null;
+    this.setSnapshot({
+      status: "offline",
+      transport: null,
+      sessionId: null,
+      clientId: this.clientId,
+      serverId: this.resolved.config.serverId,
+      rttMs: null,
+      rttByTransport: {},
+      lastError: {
+        code: P2PLinkErrorCodes.OFFLINE,
+        message: "Client suspended",
+        retryable: true,
+        outcomeUnknown: false,
+      },
+      connectedAt: this.snapshot.connectedAt,
+      pendingRequests: 0,
+      since: Date.now(),
+    });
+  }
+
+  async resume(): Promise<void> {
+    if (this.closed) {
+      throw new P2PLinkError(P2PLinkErrorCodes.CLOSED, "Client is closed");
+    }
+    this.suspended = false;
+    await this.connect();
+  }
+
   request<K extends keyof C & string>(
     method: K,
-    ...args: C[K]["request"] extends void | undefined
-      ? [request?: C[K]["request"], options?: RequestOptions]
-      : [request: C[K]["request"], options?: RequestOptions]
-  ): Promise<C[K]["response"]> {
+    ...args: RequestArgs<C, K>
+  ): Promise<RpcResponse<C, K>> {
     if (!this.rpc) {
       return Promise.reject(
         new P2PLinkError(
@@ -170,7 +231,7 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
       name: string,
       request?: unknown,
       options?: RequestOptions,
-    ) => Promise<C[K]["response"]>;
+    ) => Promise<RpcResponse<C, K>>;
     return call(method, request, options);
   }
 
@@ -204,8 +265,7 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
     });
     try {
       const identity = await this.resolveIdentity();
-      const requestedClientId =
-        this.resolved.config.clientId ?? `client-${randomToken(8)}`;
+      const requestedClientId = this.resolved.config.clientId ?? `client-${randomToken(8)}`;
       const bootstrap = validateBootstrapResult(
         await this.resolved.config.bootstrap.bootstrap({
           protocolVersion: 1,
@@ -218,6 +278,7 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
         }),
       );
       validatePublicJwk(bootstrap.server.publicKeyJwk);
+      this.serverPublicKeyJwk = bootstrap.server.publicKeyJwk;
       if (this.resolved.config.security?.serverIdentity) {
         await assertServerIdentity(
           bootstrap.server.publicKeyJwk,
@@ -262,8 +323,8 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
       );
       this.endpoint = endpoint;
       await endpoint.start();
-      endpoint.onReset((reason) => {
-        void this.handleSessionReset(reason);
+      endpoint.onReset((reset) => {
+        void this.handleVerifiedReset(reset);
       });
 
       const helloState = await createClientHello({
@@ -315,6 +376,7 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
         send: (envelope, options) => manager.send(envelope, options),
         timeoutMs: this.resolved.limits.requestTimeoutMs,
         maxPendingRequests: this.resolved.limits.maxPendingRequests,
+        maxPayloadBytes: this.resolved.limits.maxPayloadBytes,
         logger: this.resolved.logger,
         onPendingChange: (count) => manager.setPendingRequests(count),
       });
@@ -367,8 +429,7 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
     if (this.identityValue) return this.identityValue;
     const configured = this.resolved.config.security?.identity;
     if (configured) {
-      const identity =
-        typeof configured === "function" ? await configured() : configured;
+      const identity = typeof configured === "function" ? await configured() : configured;
       validatePublicJwk(identity.publicKeyJwk);
       if (typeof identity.sign !== "function") {
         throw new P2PLinkError(P2PLinkErrorCodes.INVALID_CONFIG, "Identity sign() is required");
@@ -390,8 +451,7 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
     const dynamic = this.resolved.config.mqtt?.credentials
       ? await this.resolved.config.mqtt.credentials()
       : undefined;
-    const url =
-      dynamic?.url ?? this.resolved.config.mqtt?.url ?? bootstrap.mqtt?.url;
+    const url = dynamic?.url ?? this.resolved.config.mqtt?.url ?? bootstrap.mqtt?.url;
     if (!url) {
       throw new P2PLinkError(
         P2PLinkErrorCodes.INVALID_CONFIG,
@@ -399,13 +459,9 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
       );
     }
     const username =
-      dynamic?.username ??
-      this.resolved.config.mqtt?.username ??
-      bootstrap.mqtt?.username;
+      dynamic?.username ?? this.resolved.config.mqtt?.username ?? bootstrap.mqtt?.username;
     const password =
-      dynamic?.password ??
-      this.resolved.config.mqtt?.password ??
-      bootstrap.mqtt?.password;
+      dynamic?.password ?? this.resolved.config.mqtt?.password ?? bootstrap.mqtt?.password;
     const mqttClientId = this.resolved.config.mqtt?.clientId ?? bootstrap.mqtt?.clientId;
     return {
       url,
@@ -415,22 +471,20 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
     };
   }
 
-  private waitForServerHello(
-    endpoint: MqttSessionEndpoint,
-    sessionId: string,
-  ): Promise<unknown> {
+  private waitForServerHello(endpoint: MqttSessionEndpoint, sessionId: string): Promise<unknown> {
     return new Promise((resolve, reject) => {
       let waiter: HandshakeWaiter | null = null;
-      const onReset = (reason: string): void => {
+      const rejectHandshake = (error: P2PLinkError): void => {
         if (!waiter) return;
         clearTimeout(waiter.timer);
         waiter.unsubscribe();
         waiter = null;
-        resetUnsubscribe();
-        reject(
-          new P2PLinkError(P2PLinkErrorCodes.SESSION_RESET, `Server reset the session: ${reason}`),
-        );
+        if (this.pendingHandshakeReject === rejectHandshake) {
+          this.pendingHandshakeReject = null;
+        }
+        reject(error);
       };
+      this.pendingHandshakeReject = rejectHandshake;
       const unsubscribe = endpoint.onHandshake((message) => {
         if (
           typeof message !== "object" ||
@@ -444,24 +498,73 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
         clearTimeout(waiter.timer);
         waiter.unsubscribe();
         waiter = null;
-        resetUnsubscribe();
+        if (this.pendingHandshakeReject === rejectHandshake) {
+          this.pendingHandshakeReject = null;
+        }
         resolve(message);
       });
-      const resetUnsubscribe = endpoint.onReset(onReset);
       const timer = setTimeout(() => {
         if (!waiter) return;
         waiter = null;
         unsubscribe();
-        resetUnsubscribe();
+        if (this.pendingHandshakeReject === rejectHandshake) {
+          this.pendingHandshakeReject = null;
+        }
         reject(
-          new P2PLinkError(P2PLinkErrorCodes.TIMEOUT, "Timed out waiting for the server handshake", {
-            retryable: true,
-          }),
+          new P2PLinkError(
+            P2PLinkErrorCodes.TIMEOUT,
+            "Timed out waiting for the server handshake",
+            {
+              retryable: true,
+            },
+          ),
         );
       }, this.resolved.limits.handshakeTimeoutMs);
       timer.unref?.();
       waiter = { resolve, reject, unsubscribe, timer };
     });
+  }
+
+  private async handleVerifiedReset(reset: SignalReset): Promise<void> {
+    const publicKey = this.serverPublicKeyJwk;
+    if (
+      !publicKey ||
+      !reset.signature ||
+      reset.issuedAt === undefined ||
+      reset.clientId === undefined
+    ) {
+      this.resolved.logger.warn("ignoring unsigned session reset");
+      return;
+    }
+    if (reset.clientId !== this.clientId) return;
+    if (!reset.sessionId && this.manager?.getSnapshot().status === "p2p") {
+      this.resolved.logger.warn("ignoring session reset while P2P is healthy");
+      return;
+    }
+    if (reset.sessionId && this.sessionId && reset.sessionId !== this.sessionId) return;
+    if (Math.abs(Date.now() - reset.issuedAt) > 120_000) {
+      this.resolved.logger.warn("ignoring expired session reset");
+      return;
+    }
+    const { signature, ...payload } = reset;
+    const valid = await verifySignature(
+      publicKey,
+      utf8Encode(`p2plink/v1/control/session-reset\n${canonicalJson(payload)}`),
+      fromBase64Url(signature),
+    );
+    if (!valid) {
+      this.resolved.logger.warn("ignoring forged session reset");
+      return;
+    }
+    const error = new P2PLinkError(
+      P2PLinkErrorCodes.SESSION_RESET,
+      `Server reset the session: ${reset.reason}`,
+    );
+    if (this.pendingHandshakeReject) {
+      this.pendingHandshakeReject(error);
+      return;
+    }
+    void this.handleSessionReset(reset.reason);
   }
 
   private handleSignal(signal: SignalPayload): void {
@@ -475,12 +578,7 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
   }
 
   private async negotiate(): Promise<void> {
-    if (
-      this.closed ||
-      !this.manager ||
-      !this.sessionId ||
-      !this.manager.isReady()
-    ) {
+    if (this.closed || !this.manager || !this.sessionId || !this.manager.isReady()) {
       return;
     }
     if (
@@ -491,7 +589,8 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
     }
     let engine: WebRtcEngine;
     try {
-      engine = this.resolved.webrtc.engine ?? this.defaultEngineFactory?.() ?? createBrowserWebRtcEngine();
+      engine =
+        this.resolved.webrtc.engine ?? this.defaultEngineFactory?.() ?? createBrowserWebRtcEngine();
     } catch (error) {
       this.resolved.logger.warn("WebRTC engine unavailable; staying on MQTT", {
         error: P2PLinkError.from(error).message,
@@ -508,10 +607,7 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
       epoch: this.epoch++,
       iceServers: this.resolved.webrtc.iceServers ?? [],
       sendSignal: async (signal) => {
-        await manager.send(
-          createEnvelope("signal", sessionId, signal),
-          { via: "mqtt" },
-        );
+        await manager.send(createEnvelope("signal", sessionId, signal), { via: "mqtt" });
       },
       maxFrameBytes: this.resolved.limits.maxFrameBytes,
       ...(this.resolved.webrtc.chunkSize === undefined
@@ -524,9 +620,31 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
     });
     this.webrtcTransport = transport;
     manager.setTransport("webrtc", transport);
+    if (this.negotiationTimer) clearTimeout(this.negotiationTimer);
+    this.negotiationTimer = setTimeout(() => {
+      this.negotiationTimer = null;
+      if (this.webrtcTransport !== transport || transport.state === "open") return;
+      this.resolved.logger.warn("WebRTC negotiation timed out", { negotiationId });
+      this.webrtcTransport = null;
+      manager.setTransport("webrtc", undefined);
+      void transport.close("negotiation-timeout");
+      this.scheduleRenegotiation("negotiation-timeout");
+    }, this.resolved.limits.requestTimeoutMs);
+    this.negotiationTimer.unref?.();
     transport.onStateChange((state) => {
       if (this.webrtcTransport !== transport) return;
+      if (state === "open") {
+        if (this.negotiationTimer) {
+          clearTimeout(this.negotiationTimer);
+          this.negotiationTimer = null;
+        }
+        return;
+      }
       if (state === "failed" || state === "closed") {
+        if (this.negotiationTimer) {
+          clearTimeout(this.negotiationTimer);
+          this.negotiationTimer = null;
+        }
         this.webrtcTransport = null;
         this.scheduleRenegotiation("transport-" + state);
       }
@@ -554,12 +672,7 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
   }
 
   private scheduleRenegotiation(reason: string, attemptOverride?: number): void {
-    if (
-      this.closed ||
-      !this.resolved.webrtc.enabled ||
-      !this.manager ||
-      this.retryTimer
-    ) {
+    if (this.closed || !this.resolved.webrtc.enabled || !this.manager || this.retryTimer) {
       return;
     }
     const attempt = attemptOverride ?? this.retryAttempts;
@@ -572,7 +685,8 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
       this.resolved.webrtc.maxDelayMs,
       this.resolved.webrtc.baseDelayMs * 2 ** attempt,
     );
-    const jitter = 1 - this.resolved.webrtc.jitter / 2 + Math.random() * this.resolved.webrtc.jitter;
+    const jitter =
+      1 - this.resolved.webrtc.jitter / 2 + Math.random() * this.resolved.webrtc.jitter;
     const delay = Math.max(0, Math.round(base * jitter));
     this.resolved.logger.debug("scheduling WebRTC renegotiation", { reason, delay });
     this.retryTimer = setTimeout(() => {
@@ -637,6 +751,7 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
 
   private async handleSessionReset(reason: string): Promise<void> {
     if (this.closed || this.reconnecting) return;
+    this.resolved.logger.warn("session reset received", { reason });
     const now = Date.now();
     this.resetsInWindow = this.resetsInWindow.filter((time) => now - time < 60_000);
     if (this.resetsInWindow.length >= 3) {
@@ -658,11 +773,10 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
     this.reconnecting = true;
     this.connected = false;
     this.rpc?.failAll(
-      new P2PLinkError(
-        P2PLinkErrorCodes.SESSION_RESET,
-        `Session reset by server: ${reason}`,
-        { retryable: true, outcomeUnknown: true },
-      ),
+      new P2PLinkError(P2PLinkErrorCodes.SESSION_RESET, `Session reset by server: ${reason}`, {
+        retryable: true,
+        outcomeUnknown: true,
+      }),
     );
     this.setSnapshot({
       ...this.snapshot,
@@ -681,13 +795,16 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
     this.sessionId = null;
     this.reconnecting = false;
     if (!this.closed) {
-      setTimeout(() => {
+      this.resetTimer = setTimeout(() => {
+        this.resetTimer = null;
+        if (this.closed) return;
         void this.connect().catch((error: unknown) => {
           this.resolved.logger.error("session re-establishment failed", {
             error: P2PLinkError.from(error).message,
           });
         });
       }, 750);
+      this.resetTimer.unref?.();
     }
   }
 
@@ -695,6 +812,14 @@ export class P2PLinkClientImpl<C extends RpcContract, E extends EventContract>
     if (this.retryTimer) {
       clearTimeout(this.retryTimer);
       this.retryTimer = null;
+    }
+    if (this.negotiationTimer) {
+      clearTimeout(this.negotiationTimer);
+      this.negotiationTimer = null;
+    }
+    if (this.resetTimer) {
+      clearTimeout(this.resetTimer);
+      this.resetTimer = null;
     }
     const transport = this.webrtcTransport;
     this.webrtcTransport = null;
@@ -761,4 +886,3 @@ function resolveConfig(config: P2PLinkClientConfig): ResolvedConfig {
     },
   };
 }
-

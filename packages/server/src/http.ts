@@ -36,9 +36,7 @@ export async function handleNodeBootstrapRequest(
       method: request.method ?? "GET",
       headers: request.headers,
       body,
-      ...(request.socket.remoteAddress === undefined
-        ? {}
-        : { ip: request.socket.remoteAddress }),
+      ...(request.socket.remoteAddress === undefined ? {} : { ip: request.socket.remoteAddress }),
     });
     response.writeHead(result.status, { "content-type": "application/json" });
     response.end(JSON.stringify(result.body));

@@ -56,7 +56,9 @@ describe("authenticated handshake", () => {
     const server = new TransportSecurity(serverSession, "server");
     for (const transport of ["mqtt", "webrtc"] as const) {
       const frame = await client.seal(transport, utf8Encode(`hello-${transport}`));
-      expect(new TextDecoder().decode(await server.open(transport, frame))).toBe(`hello-${transport}`);
+      expect(new TextDecoder().decode(await server.open(transport, frame))).toBe(
+        `hello-${transport}`,
+      );
       const back = await server.seal(transport, utf8Encode("ack"));
       expect(new TextDecoder().decode(await client.open(transport, back))).toBe("ack");
     }
@@ -68,10 +70,16 @@ describe("authenticated handshake", () => {
     const attacker = await generateIdentity("attacker", { extractable: true });
     const fingerprint = await publicKeyFingerprint(clientIdentity.publicKeyJwk);
     const state = await createClientHello({
-      tenant, serverId, clientId, sessionId, capability, identity: clientIdentity,
+      tenant,
+      serverId,
+      clientId,
+      sessionId,
+      capability,
+      identity: clientIdentity,
     });
     const verified = await verifyClientHello(state.hello, {
-      tenant, serverId,
+      tenant,
+      serverId,
       validateCapability: async () => ({ clientId, identityFingerprint: fingerprint }),
     });
     const { hello } = await createServerHello(verified, serverIdentity);
@@ -87,11 +95,17 @@ describe("authenticated handshake", () => {
     const other = await generateIdentity("other", { extractable: true });
     const fingerprint = await publicKeyFingerprint(other.publicKeyJwk);
     const state = await createClientHello({
-      tenant, serverId, clientId, sessionId, capability, identity: clientIdentity,
+      tenant,
+      serverId,
+      clientId,
+      sessionId,
+      capability,
+      identity: clientIdentity,
     });
     await expect(
       verifyClientHello(state.hello, {
-        tenant, serverId,
+        tenant,
+        serverId,
         validateCapability: async () => ({ clientId, identityFingerprint: fingerprint }),
       }),
     ).rejects.toMatchObject({ code: "AUTH_FAILED" });
@@ -102,7 +116,8 @@ describe("authenticated handshake", () => {
     const tampered = { ...clientState.hello, clientId: "other-client" };
     await expect(
       verifyClientHello(tampered, {
-        tenant, serverId,
+        tenant,
+        serverId,
         validateCapability: async () => ({ clientId: "other-client", identityFingerprint: "x" }),
       }),
     ).rejects.toBeInstanceOf(P2PLinkError);
@@ -120,7 +135,8 @@ describe("frame protection", () => {
 
     const second = await client.seal("mqtt", utf8Encode("second"));
     const tampered = new Uint8Array(second);
-    tampered[tampered.length - 1] ^= 0xff;
+    const last = tampered.length - 1;
+    tampered[last] = (tampered[last] ?? 0) ^ 0xff;
     await expect(server.open("mqtt", tampered)).rejects.toMatchObject({ code: "DECRYPT_FAILED" });
     expect(new TextDecoder().decode(await server.open("mqtt", second))).toBe("second");
 

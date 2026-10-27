@@ -24,11 +24,13 @@ export async function generateIdentity(
   identityId: string,
   options: { extractable?: boolean } = {},
 ): Promise<IdentityKeyPair> {
-  if (!identityId) throw new P2PLinkError(P2PLinkErrorCodes.INVALID_CONFIG, "identityId is required");
-  const keyPair = await globalThis.crypto.subtle.generateKey(ECDSA_PARAMS, options.extractable ?? false, [
-    "sign",
-    "verify",
-  ]);
+  if (!identityId)
+    throw new P2PLinkError(P2PLinkErrorCodes.INVALID_CONFIG, "identityId is required");
+  const keyPair = await globalThis.crypto.subtle.generateKey(
+    ECDSA_PARAMS,
+    options.extractable ?? false,
+    ["sign", "verify"],
+  );
   const publicKeyJwk = await globalThis.crypto.subtle.exportKey("jwk", keyPair.publicKey);
   return wrapIdentity(identityId, keyPair.privateKey, publicKeyJwk);
 }

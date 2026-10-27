@@ -29,6 +29,12 @@ export function randomToken(bytes = 24): string {
   return toBase64Url(randomBytes(bytes));
 }
 
+export async function sha256Base64Url(input: string | Uint8Array): Promise<string> {
+  const data = typeof input === "string" ? utf8Encode(input) : input;
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", data as unknown as BufferSource);
+  return toBase64Url(new Uint8Array(digest));
+}
+
 export function toBase64Url(bytes: Uint8Array): string {
   let binary = "";
   const chunk = 0x8000;

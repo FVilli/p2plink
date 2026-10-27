@@ -16,3 +16,4 @@ test-results/
 server-identity.json
 client-identity.json
 examples/**/dist/
+examples/**/.data/

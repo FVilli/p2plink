@@ -9,13 +9,48 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
   },
-  "files": ["dist", "README.md"],
-  "scripts": { "build": "tsup", "test": "vitest run", "typecheck": "tsc --noEmit" },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
-    "@p2plink/core": "workspace:*",
+    "@p2plink/core": "^0.1.0",
     "mqtt": "^5.16.1"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "webrtc",
+    "mqtt",
+    "p2p",
+    "rpc",
+    "typescript",
+    "fallback",
+    "datachannel"
+  ],
+  "homepage": "https://github.com/FVilli/p2plink#readme",
+  "bugs": {
+    "url": "https://github.com/FVilli/p2plink/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FVilli/p2plink.git",
+    "directory": "packages/mqtt"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

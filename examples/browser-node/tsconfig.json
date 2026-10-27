@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "noEmit": true,
+    "paths": {
+      "@p2plink/core": ["../../packages/core/src/index.ts"],
+      "@p2plink/crypto": ["../../packages/crypto/src/index.ts"],
+      "@p2plink/mqtt": ["../../packages/mqtt/src/index.ts"],
+      "@p2plink/webrtc": ["../../packages/webrtc/src/index.ts"],
+      "@p2plink/webrtc/node": ["../../packages/webrtc/src/node.ts"],
+      "@p2plink/client": ["../../packages/client/src/index.ts"],
+      "@p2plink/client/node": ["../../packages/client/src/node.ts"],
+      "@p2plink/server": ["../../packages/server/src/index.ts"]
+    }
+  },
+  "include": ["src", "server.ts", "vite.config.ts"]
+}

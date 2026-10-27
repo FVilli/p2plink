@@ -21,7 +21,10 @@ export function encodeTransportPackets(
   }
   const packets: Uint8Array[] = [];
   for (let index = 0; index < count; index += 1) {
-    const chunk = frame.subarray(index * chunkSize, Math.min(frame.length, (index + 1) * chunkSize));
+    const chunk = frame.subarray(
+      index * chunkSize,
+      Math.min(frame.length, (index + 1) * chunkSize),
+    );
     const packet = new Uint8Array(CHUNK_HEADER + chunk.length);
     packet[0] = PACKET_CHUNK;
     new DataView(packet.buffer).setUint32(1, messageId >>> 0, false);

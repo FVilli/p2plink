@@ -67,9 +67,7 @@ export function decodeEnvelopeJson(input: Uint8Array | string, maxBytes: number)
   }
   let value: unknown;
   try {
-    value = JSON.parse(
-      typeof input === "string" ? input : utf8Decode(bytes),
-    ) as unknown;
+    value = JSON.parse(typeof input === "string" ? input : utf8Decode(bytes)) as unknown;
   } catch (error) {
     throw new P2PLinkError(P2PLinkErrorCodes.PROTOCOL, "Malformed JSON envelope", {
       cause: error,
@@ -214,6 +212,30 @@ export function validateSignalReset(value: unknown): asserts value is SignalRese
   ) {
     throw new P2PLinkError(P2PLinkErrorCodes.PROTOCOL, "Malformed session reset");
   }
+  if (
+    value.clientId !== undefined &&
+    (typeof value.clientId !== "string" || value.clientId.length > 64)
+  ) {
+    throw new P2PLinkError(P2PLinkErrorCodes.PROTOCOL, "Malformed session reset client id");
+  }
+  if (
+    value.sessionId !== undefined &&
+    (typeof value.sessionId !== "string" || value.sessionId.length > 128)
+  ) {
+    throw new P2PLinkError(P2PLinkErrorCodes.PROTOCOL, "Malformed session reset session id");
+  }
+  if (
+    value.issuedAt !== undefined &&
+    (typeof value.issuedAt !== "number" || !Number.isFinite(value.issuedAt))
+  ) {
+    throw new P2PLinkError(P2PLinkErrorCodes.PROTOCOL, "Malformed session reset timestamp");
+  }
+  if (
+    value.signature !== undefined &&
+    (typeof value.signature !== "string" || value.signature.length > 256)
+  ) {
+    throw new P2PLinkError(P2PLinkErrorCodes.PROTOCOL, "Malformed session reset signature");
+  }
 }
 
 const HANDSHAKE_PREFIX = SESSION_MESSAGE_HANDSHAKE;
@@ -233,10 +255,15 @@ export function decodeHandshakeMessage(bytes: Uint8Array): unknown {
   if (bytes.length < 2 || bytes[0] !== HANDSHAKE_PREFIX) {
     throw new P2PLinkError(P2PLinkErrorCodes.PROTOCOL, "Not a handshake message");
   }
+  if (bytes.length > 32 * 1024) {
+    throw new P2PLinkError(P2PLinkErrorCodes.PAYLOAD_TOO_LARGE, "Handshake message too large");
+  }
   try {
     return JSON.parse(utf8Decode(bytes.subarray(1))) as unknown;
   } catch (error) {
-    throw new P2PLinkError(P2PLinkErrorCodes.PROTOCOL, "Malformed handshake JSON", { cause: error });
+    throw new P2PLinkError(P2PLinkErrorCodes.PROTOCOL, "Malformed handshake JSON", {
+      cause: error,
+    });
   }
 }
 

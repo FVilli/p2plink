@@ -12,30 +12,43 @@ export interface RpcDefinition {
   response: unknown;
 }
 
-/** Application RPC contract: method name -> request/response types. */
-export type RpcContract = Record<string, RpcDefinition>;
+/**
+ * Application RPC contract. Declared as `object` rather than
+ * `Record<string, RpcDefinition>` so that ordinary TypeScript `interface`
+ * declarations (which lack an index signature) are accepted.
+ */
+export type RpcContract = object;
 
 /** Application push-event contract: event name -> payload type. */
-export type EventContract = Record<string, unknown>;
+export type EventContract = object;
+
+export type RpcRequest<C extends RpcContract, K extends keyof C & string> = C[K] extends {
+  request: infer R;
+}
+  ? R
+  : never;
+
+export type RpcResponse<C extends RpcContract, K extends keyof C & string> = C[K] extends {
+  response: infer R;
+}
+  ? R
+  : never;
 
 /**
  * Argument tuple for an RPC method. Methods whose request type is `void` or
  * `undefined` can be called without an argument.
  */
 export type RequestArgs<C extends RpcContract, K extends keyof C & string> =
-  C[K]["request"] extends void | undefined ? [] : [request: C[K]["request"]];
+  RpcRequest<C, K> extends void | undefined
+    ? [request?: RpcRequest<C, K>, options?: RequestOptions]
+    : [request: RpcRequest<C, K>, options?: RequestOptions];
 
 export type TransportKind = "mqtt" | "webrtc";
 
 export type TransportState = "connecting" | "open" | "closed" | "failed";
 
 export type ConnectionStatus =
-  | "connecting"
-  | "p2p"
-  | "mqtt"
-  | "offline"
-  | "reconnecting"
-  | "closed";
+  "connecting" | "p2p" | "mqtt" | "offline" | "reconnecting" | "closed";
 
 export interface SerializedError {
   code: string;
@@ -131,7 +144,7 @@ export interface ClientIdentity {
   sign(data: Uint8Array): Promise<Uint8Array>;
 }
 
-export interface ServerIdentity extends ClientIdentity {}
+export type ServerIdentity = ClientIdentity;
 
 export interface ServerIdentityPin {
   publicKeyJwk?: JsonWebKey;

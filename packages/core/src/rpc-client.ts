@@ -1,7 +1,16 @@
 import { P2PLinkError, P2PLinkErrorCodes } from "./errors.js";
-import { createEnvelope } from "./protocol.js";
+import { createEnvelope, encodeEnvelopeJson } from "./protocol.js";
 import type { Envelope, EventPayload } from "./protocol-types.js";
-import type { TransportKind, RpcContract, RequestOptions, Unsubscribe } from "./types.js";
+import type {
+  TransportKind,
+  RpcContract,
+  RequestOptions,
+  Unsubscribe,
+  RpcRequest,
+  RpcResponse,
+  RequestArgs,
+  EventContract,
+} from "./types.js";
 import { noopLogger, type Logger } from "./types.js";
 
 export type RpcSend = (
@@ -16,6 +25,8 @@ interface PendingRequest {
   idempotent: boolean;
   attempted: boolean;
   sent: boolean;
+  inFlight: boolean;
+  needsRetry: boolean;
   lastTransport: TransportKind | null;
   attempts: number;
   resolve: (value: unknown) => void;
@@ -29,12 +40,13 @@ export interface RpcClientOptions {
   send: RpcSend;
   timeoutMs: number;
   maxPendingRequests: number;
+  maxPayloadBytes?: number;
   logger?: Logger;
   onPendingChange?: (count: number) => void;
   idFactory?: () => string;
 }
 
-export class RpcClient<C extends RpcContract, E extends Record<string, unknown>> {
+export class RpcClient<C extends RpcContract, E extends EventContract> {
   private readonly options: RpcClientOptions;
   private readonly logger: Logger;
   private readonly pending = new Map<string, PendingRequest>();
@@ -49,12 +61,10 @@ export class RpcClient<C extends RpcContract, E extends Record<string, unknown>>
 
   request<K extends keyof C & string>(
     method: K,
-    ...args: C[K]["request"] extends void | undefined
-      ? [request?: C[K]["request"], options?: RequestOptions]
-      : [request: C[K]["request"], options?: RequestOptions]
-  ): Promise<C[K]["response"]> {
-    const [request, options] = args as [unknown, RequestOptions | undefined];
-    return this.sendRequest<C[K]["response"]>(method, request, options ?? {});
+    ...args: RequestArgs<C, K>
+  ): Promise<RpcResponse<C, K>> {
+    const [request, options] = args as [RpcRequest<C, K>?, RequestOptions?];
+    return this.sendRequest<RpcResponse<C, K>>(method, request, options ?? {});
   }
 
   private sendRequest<R>(method: string, request: unknown, options: RequestOptions): Promise<R> {
@@ -80,6 +90,11 @@ export class RpcClient<C extends RpcContract, E extends Record<string, unknown>>
       { method, params: request ?? null },
       { id, ...(options.idempotencyKey === undefined ? {} : { idem: options.idempotencyKey }) },
     );
+    try {
+      encodeEnvelopeJson(envelope, this.options.maxPayloadBytes ?? 64 * 1024);
+    } catch (error) {
+      return Promise.reject(P2PLinkError.from(error));
+    }
     const timeoutMs = options.timeoutMs ?? this.options.timeoutMs;
     return new Promise<R>((resolve, reject) => {
       const pending: PendingRequest = {
@@ -89,6 +104,8 @@ export class RpcClient<C extends RpcContract, E extends Record<string, unknown>>
         idempotent: options.idempotent ?? false,
         attempted: false,
         sent: false,
+        inFlight: false,
+        needsRetry: false,
         lastTransport: null,
         attempts: 0,
         resolve: resolve as (value: unknown) => void,
@@ -115,12 +132,18 @@ export class RpcClient<C extends RpcContract, E extends Record<string, unknown>>
   }
 
   private async transmit(pending: PendingRequest): Promise<void> {
+    if (!this.pending.has(pending.id)) return;
+    if (pending.inFlight) {
+      pending.needsRetry = true;
+      return;
+    }
+    pending.inFlight = true;
+    pending.attempted = true;
+    pending.attempts += 1;
     try {
-      pending.attempted = true;
       const transport = await this.options.send(pending.envelope);
       pending.sent = true;
       pending.lastTransport = transport;
-      pending.attempts += 1;
     } catch (error) {
       const normalized = P2PLinkError.from(error);
       // A request that was never accepted by a transport is definitely not sent.
@@ -137,10 +160,23 @@ export class RpcClient<C extends RpcContract, E extends Record<string, unknown>>
         });
         return;
       }
-      this.logger.debug("idempotent request will retry on next transport", {
+      this.logger.debug("idempotent request send failed", {
         method: pending.method,
         error: normalized.message,
       });
+    } finally {
+      pending.inFlight = false;
+      if (
+        pending.needsRetry &&
+        pending.idempotent &&
+        pending.attempts < 4 &&
+        this.pending.has(pending.id)
+      ) {
+        pending.needsRetry = false;
+        queueMicrotask(() => {
+          void this.transmit(pending);
+        });
+      }
     }
   }
 
@@ -148,7 +184,13 @@ export class RpcClient<C extends RpcContract, E extends Record<string, unknown>>
   handleTransportChange(from: TransportKind | null, to: TransportKind | null): void {
     if (to === null || from === to) return;
     for (const pending of this.pending.values()) {
-      if (!pending.idempotent || !pending.sent || pending.lastTransport === to) continue;
+      if (!pending.idempotent || pending.lastTransport === to) continue;
+      if (pending.inFlight || !pending.sent) {
+        // A send may still complete on the old transport. Re-evaluate when it
+        // settles instead of losing the failover opportunity.
+        pending.needsRetry = true;
+        continue;
+      }
       if (pending.attempts >= 4) {
         this.rejectPending(
           pending,
@@ -165,19 +207,10 @@ export class RpcClient<C extends RpcContract, E extends Record<string, unknown>>
         from: pending.lastTransport,
         to,
       });
-      void this.options
-        .send(pending.envelope, { via: to })
-        .then((transport) => {
-          pending.sent = true;
-          pending.lastTransport = transport;
-          pending.attempts += 1;
-        })
-        .catch((error: unknown) => {
-          this.logger.warn("retransmission failed", {
-            method: pending.method,
-            error: P2PLinkError.from(error).message,
-          });
-        });
+      pending.needsRetry = false;
+      queueMicrotask(() => {
+        void this.transmit(pending);
+      });
     }
   }
 
@@ -185,7 +218,7 @@ export class RpcClient<C extends RpcContract, E extends Record<string, unknown>>
     if (envelope.sid !== this.options.sessionId) return;
     if (envelope.type === "event") {
       const payload = envelope.payload as EventPayload;
-      for (const listener of this.listeners.get(payload.event) ?? []) {
+      for (const listener of this.listeners.get(payload.event as keyof E & string) ?? []) {
         try {
           listener(payload.data);
         } catch (error) {
@@ -209,7 +242,7 @@ export class RpcClient<C extends RpcContract, E extends Record<string, unknown>>
     const pending = this.pending.get(envelope.cid);
     if (!pending) return;
     this.pending.delete(envelope.cid);
-    pending.timer && clearTimeout(pending.timer);
+    if (pending.timer) clearTimeout(pending.timer);
     pending.cleanupAbort?.();
     this.options.onPendingChange?.(this.pending.size);
     if (envelope.type === "error") {

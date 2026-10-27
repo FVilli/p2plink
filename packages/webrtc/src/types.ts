@@ -1,12 +1,12 @@
-import type { IceCandidateInit, IceServer, SessionDescriptionInit, Unsubscribe } from "@p2plink/core";
+import type {
+  IceCandidateInit,
+  IceServer,
+  SessionDescriptionInit,
+  Unsubscribe,
+} from "@p2plink/core";
 
 export type PeerConnectionState =
-  | "new"
-  | "connecting"
-  | "connected"
-  | "disconnected"
-  | "failed"
-  | "closed";
+  "new" | "connecting" | "connected" | "disconnected" | "failed" | "closed";
 
 export type ChannelState = "connecting" | "open" | "closing" | "closed";
 

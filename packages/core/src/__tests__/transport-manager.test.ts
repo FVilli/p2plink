@@ -171,7 +171,12 @@ describe("TransportManager", () => {
     manager.start();
     mqtt.setState("open");
     mqtt.inject(new TextEncoder().encode("tamper"));
-    mqtt.inject(encodeEnvelopeJson(createEnvelope("event", "other-session-id", { event: "x", data: 1 }), 65536));
+    mqtt.inject(
+      encodeEnvelopeJson(
+        createEnvelope("event", "other-session-id", { event: "x", data: 1 }),
+        65536,
+      ),
+    );
     mqtt.inject(encodeEnvelopeJson(createEnvelope("event", sid, { event: "x", data: 1 }), 65536));
     await flush();
     expect(received).toHaveLength(1);

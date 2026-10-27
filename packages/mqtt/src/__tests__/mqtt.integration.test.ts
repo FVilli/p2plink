@@ -5,8 +5,8 @@ import { MqttServerEndpoint } from "../server-endpoint.js";
 import { MqttSessionEndpoint } from "../session-endpoint.js";
 
 const url = process.env.P2PLINK_BROKER_URL ?? "mqtt://127.0.0.1:1883";
-const tenant = "itest";
-const serverId = "server-1";
+const tenant = "mqtt-itest";
+const serverId = "mqtt-server-1";
 const clientId = "client-test-1";
 
 describe("MQTT endpoints against a real broker", () => {
@@ -33,10 +33,7 @@ describe("MQTT endpoints against a real broker", () => {
     await client.connect();
     serverEndpoint = new MqttServerEndpoint(server, { tenant, serverId });
     await serverEndpoint.start();
-    clientEndpoint = new MqttSessionEndpoint(
-      client,
-      sessionTopics({ tenant, serverId, clientId }),
-    );
+    clientEndpoint = new MqttSessionEndpoint(client, sessionTopics({ tenant, serverId, clientId }));
     await clientEndpoint.start();
   }, 20_000);
 
@@ -79,7 +76,13 @@ describe("MQTT endpoints against a real broker", () => {
       const otherTopics = sessionTopics({ tenant, serverId, clientId: "client-test-2" });
       let leaked = false;
       // Mosquitto may grant the subscription and enforce ACL on delivery.
-      await intruder.subscribeAsync(otherTopics.sessionS2c, () => { leaked = true; }, 1);
+      await intruder.subscribeAsync(
+        otherTopics.sessionS2c,
+        () => {
+          leaked = true;
+        },
+        1,
+      );
       await serverEndpoint.publishToClient("client-test-2", new Uint8Array([2, 1, 1, 1]));
       await new Promise((resolve) => setTimeout(resolve, 400));
       expect(leaked).toBe(false);

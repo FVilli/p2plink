@@ -6,19 +6,22 @@ import {
   RpcServer,
   TokenBucket,
   TransportManager,
+  canonicalJson,
   createEnvelope,
   noopLogger,
+  toBase64Url,
+  utf8Encode,
   type IceServer,
   type IdempotencyStore,
   type Logger,
   type P2PLinkLimits,
   type RpcAuthorizer,
   type RpcHandler,
-  type RpcHandlerContext,
   type RpcHandlerOptions,
   type RpcIdentity,
   type ServerIdentity,
   type SignalPayload,
+  type SignalReset,
   type TransportKind,
   type Unsubscribe,
 } from "@p2plink/core";
@@ -96,6 +99,7 @@ interface ServerSession {
   pendingRequests: number;
   lastHealthyAt: number;
   webrtc: WebRtcTransport | null;
+  signalChain: Promise<void>;
   closed: boolean;
 }
 
@@ -110,6 +114,7 @@ export class P2PLinkServer {
   private readonly rpc: RpcServer;
   private readonly bootstrapService: BootstrapService;
   private readonly sessions = new Map<string, ServerSession>();
+  private readonly handshakeQueues = new Map<string, Promise<void>>();
   private readonly handshakeBuckets = new Map<string, TokenBucket>();
   private mqtt: MqttConnection | null = null;
   private endpoint: MqttServerEndpoint | null = null;
@@ -136,6 +141,7 @@ export class P2PLinkServer {
     this.rpc = new RpcServer({
       idempotency: config.idempotencyStore ?? new MemoryIdempotencyStore(),
       defaultTimeoutMs: this.limits.requestTimeoutMs,
+      maxPayloadBytes: this.limits.maxPayloadBytes,
       ...(config.idempotencyTtlMs === undefined
         ? {}
         : { idempotencyTtlMs: config.idempotencyTtlMs }),
@@ -175,12 +181,8 @@ export class P2PLinkServer {
     const mqtt = new MqttConnection({
       url: this.config.mqtt.url,
       clientId: this.config.mqtt.clientId ?? `p2p-server-${this.config.serverId}`,
-      ...(this.config.mqtt.username === undefined
-        ? {}
-        : { username: this.config.mqtt.username }),
-      ...(this.config.mqtt.password === undefined
-        ? {}
-        : { password: this.config.mqtt.password }),
+      ...(this.config.mqtt.username === undefined ? {} : { username: this.config.mqtt.username }),
+      ...(this.config.mqtt.password === undefined ? {} : { password: this.config.mqtt.password }),
       ...(this.config.mqtt.keepaliveSeconds === undefined
         ? {}
         : { keepaliveSeconds: this.config.mqtt.keepaliveSeconds }),
@@ -200,11 +202,14 @@ export class P2PLinkServer {
       serverId: this.config.serverId,
       maxFrameBytes: this.limits.maxFrameBytes,
       logger: this.logger,
+      onUnknownClient: (clientId) => {
+        void this.resetClient(clientId, "unknown-session");
+      },
     });
     this.endpoint = endpoint;
     await endpoint.start();
     this.handshakeUnsubscribe = endpoint.onHandshake((clientId, message) => {
-      void this.handleHandshake(clientId, message);
+      this.handleHandshake(clientId, message);
     });
     this.started = true;
     this.gcTimer = setInterval(() => {
@@ -225,9 +230,7 @@ export class P2PLinkServer {
     this.handshakeUnsubscribe?.();
     this.handshakeUnsubscribe = null;
     await Promise.all(
-      [...this.sessions.keys()].map((clientId) =>
-        this.closeSession(clientId, "server-stop"),
-      ),
+      [...this.sessions.keys()].map((clientId) => this.closeSession(clientId, "server-stop")),
     );
     await this.endpoint?.close();
     this.endpoint = null;
@@ -287,7 +290,24 @@ export class P2PLinkServer {
     });
   }
 
-  private async handleHandshake(clientId: string, message: unknown): Promise<void> {
+  private handleHandshake(clientId: string, message: unknown): void {
+    const previous = this.handshakeQueues.get(clientId) ?? Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(() => this.processHandshake(clientId, message))
+      .catch((error: unknown) => {
+        this.logger.error("handshake processing failed", {
+          clientId,
+          error: P2PLinkError.from(error).message,
+        });
+      });
+    this.handshakeQueues.set(clientId, next);
+    void next.then(() => {
+      if (this.handshakeQueues.get(clientId) === next) this.handshakeQueues.delete(clientId);
+    });
+  }
+
+  private async processHandshake(clientId: string, message: unknown): Promise<void> {
     if (!this.started || !this.endpoint) return;
     if (
       typeof message !== "object" ||
@@ -300,7 +320,7 @@ export class P2PLinkServer {
       await this.resetClient(clientId, "client-id-mismatch");
       return;
     }
-    if (this.sessions.size >= this.limits.maxSessions) {
+    if (this.sessions.size >= this.limits.maxSessions && !this.sessions.has(clientId)) {
       await this.resetClient(clientId, "server-busy");
       return;
     }
@@ -358,6 +378,10 @@ export class P2PLinkServer {
         this.config.identity,
       );
       const derived = await completeServerHandshake(serverState);
+      // Serialized per client: close the previous session before installing
+      // the new registration, so only one endpoint owns the client namespace.
+      const previous = this.sessions.get(clientId);
+      if (previous) await this.closeSession(clientId, "replaced");
       const endpoint = this.endpoint.forClient(clientId);
       const security = new TransportSecurity(derived, "server", {
         maxFrameBytes: this.limits.maxFrameBytes,
@@ -370,9 +394,7 @@ export class P2PLinkServer {
         subject: state.capability.subject ?? clientId,
         identityId: state.clientHello.identityId,
         publicKeyJwk: state.clientHello.identityPublicKey,
-        ...(state.capability.claims === undefined
-          ? {}
-          : { claims: state.capability.claims }),
+        ...(state.capability.claims === undefined ? {} : { claims: state.capability.claims }),
       };
       const manager = new TransportManager({
         sessionId,
@@ -403,6 +425,7 @@ export class P2PLinkServer {
         pendingRequests: 0,
         lastHealthyAt: Date.now(),
         webrtc: null,
+        signalChain: Promise.resolve(),
         closed: false,
       };
       manager.onStatus((snapshot) => {
@@ -411,8 +434,6 @@ export class P2PLinkServer {
       manager.onEnvelope((envelope, transport) => {
         this.handleEnvelope(session, envelope, transport);
       });
-      const previous = this.sessions.get(clientId);
-      if (previous) await this.closeSession(clientId, "replaced");
       this.sessions.set(clientId, session);
       manager.start();
       await endpoint.sendHandshake(serverHello);
@@ -445,9 +466,18 @@ export class P2PLinkServer {
       case "close":
         void this.closeSession(session.clientId, "client-close");
         return;
-      case "signal":
-        void this.handleSignal(session, envelope.payload as SignalPayload);
+      case "signal": {
+        const signal = envelope.payload as SignalPayload;
+        session.signalChain = session.signalChain
+          .then(() => this.handleSignal(session, signal))
+          .catch((error: unknown) => {
+            this.logger.warn("signaling queue failed", {
+              clientId: session.clientId,
+              error: P2PLinkError.from(error).message,
+            });
+          });
         return;
+      }
       case "request":
         void this.handleRequest(session, envelope, transport);
         return;
@@ -462,7 +492,12 @@ export class P2PLinkServer {
     transport: TransportKind,
   ): Promise<void> {
     if (!session.bucket.tryRemove()) {
-      await this.sendError(session, envelope, P2PLinkErrorCodes.RATE_LIMITED, "Rate limit exceeded");
+      await this.sendError(
+        session,
+        envelope,
+        P2PLinkErrorCodes.RATE_LIMITED,
+        "Rate limit exceeded",
+      );
       return;
     }
     if (session.pendingRequests >= this.limits.maxPendingRequests) {
@@ -520,13 +555,14 @@ export class P2PLinkServer {
     if (session.closed || !this.config.webrtc?.enabled) return;
     const engine = this.config.webrtc.engine;
     if (!engine) return;
+    let transport: WebRtcTransport | null = null;
     try {
       if (signal.kind === "offer") {
         const existing = session.webrtc;
         session.webrtc = null;
         if (existing) await existing.close("renegotiated");
         session.manager.setTransport("webrtc", undefined);
-        const transport = new WebRtcTransport({
+        transport = new WebRtcTransport({
           engine,
           role: "answerer",
           negotiationId: signal.negotiationId,
@@ -534,10 +570,9 @@ export class P2PLinkServer {
           iceServers: this.config.webrtc.iceServers ?? [],
           maxFrameBytes: this.limits.maxFrameBytes,
           sendSignal: async (payload) => {
-            await session.manager.send(
-              createEnvelope("signal", session.sessionId, payload),
-              { via: "mqtt" },
-            );
+            await session.manager.send(createEnvelope("signal", session.sessionId, payload), {
+              via: "mqtt",
+            });
           },
           logger: this.logger,
         });
@@ -552,15 +587,21 @@ export class P2PLinkServer {
         });
         await transport.handleSignal(signal);
       } else if (signal.kind === "ice" || signal.kind === "bye") {
-        await session.webrtc?.handleSignal(signal);
+        const current = session.webrtc;
+        if (current) {
+          transport = current;
+          await current.handleSignal(signal);
+        }
       }
     } catch (error) {
       this.logger.warn("webrtc signaling failed", {
         clientId: session.clientId,
         error: P2PLinkError.from(error).message,
       });
-      session.manager.setTransport("webrtc", undefined);
-      session.webrtc = null;
+      if (transport && session.webrtc === transport) {
+        session.manager.setTransport("webrtc", undefined);
+        session.webrtc = null;
+      }
     }
   }
 
@@ -587,9 +628,24 @@ export class P2PLinkServer {
     }
   }
 
-  private async resetClient(clientId: string, reason: string): Promise<void> {
+  private async resetClient(clientId: string, reason: string, sessionId?: string): Promise<void> {
     try {
-      await this.endpoint?.publishSessionReset(clientId, undefined, reason);
+      const issuedAt = Date.now();
+      const payload: Omit<SignalReset, "signature"> = {
+        v: 1,
+        kind: "session-reset",
+        clientId,
+        reason,
+        issuedAt,
+        ...(sessionId === undefined ? {} : { sessionId }),
+      };
+      const signature = await this.config.identity.sign(
+        utf8Encode(`p2plink/v1/control/session-reset\n${canonicalJson(payload)}`),
+      );
+      await this.endpoint?.publishSessionReset(clientId, {
+        ...payload,
+        signature: toBase64Url(signature),
+      });
     } catch {
       // Best effort.
     }

@@ -1,4 +1,9 @@
-import type { IceCandidateInit, IceServer, SessionDescriptionInit, Unsubscribe } from "@p2plink/core";
+import type {
+  IceCandidateInit,
+  IceServer,
+  SessionDescriptionInit,
+  Unsubscribe,
+} from "@p2plink/core";
 import type {
   ChannelState,
   DataChannelLike,
@@ -101,7 +106,8 @@ class NativePeerConnection implements PeerConnectionLike {
   }
 
   onDataChannel(listener: (channel: DataChannelLike) => void): Unsubscribe {
-    const handler = (event: RTCDataChannelEvent): void => listener(new NativeDataChannel(event.channel));
+    const handler = (event: RTCDataChannelEvent): void =>
+      listener(new NativeDataChannel(event.channel));
     this.peer.addEventListener("datachannel", handler);
     return () => this.peer.removeEventListener("datachannel", handler);
   }

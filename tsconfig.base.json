@@ -3,9 +3,7 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": [
-      "ES2022"
-    ],
+    "lib": ["ES2022"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -22,36 +20,16 @@
     "resolveJsonModule": true,
     "baseUrl": ".",
     "paths": {
-      "@p2plink/core": [
-        "packages/core/src/index.ts"
-      ],
-      "@p2plink/crypto": [
-        "packages/crypto/src/index.ts"
-      ],
-      "@p2plink/mqtt": [
-        "packages/mqtt/src/index.ts"
-      ],
-      "@p2plink/webrtc": [
-        "packages/webrtc/src/index.ts"
-      ],
-      "@p2plink/webrtc/node": [
-        "packages/webrtc/src/node.ts"
-      ],
-      "@p2plink/client": [
-        "packages/client/src/index.ts"
-      ],
-      "@p2plink/client/node": [
-        "packages/client/src/node.ts"
-      ],
-      "@p2plink/server": [
-        "packages/server/src/index.ts"
-      ],
-      "@p2plink/angular": [
-        "packages/angular/src/index.ts"
-      ],
-      "@p2plink/nestjs": [
-        "packages/nestjs/src/index.ts"
-      ]
+      "@p2plink/core": ["packages/core/src/index.ts"],
+      "@p2plink/crypto": ["packages/crypto/src/index.ts"],
+      "@p2plink/mqtt": ["packages/mqtt/src/index.ts"],
+      "@p2plink/webrtc": ["packages/webrtc/src/index.ts"],
+      "@p2plink/webrtc/node": ["packages/webrtc/src/node.ts"],
+      "@p2plink/client": ["packages/client/src/index.ts"],
+      "@p2plink/client/node": ["packages/client/src/node.ts"],
+      "@p2plink/server": ["packages/server/src/index.ts"],
+      "@p2plink/angular": ["packages/angular/src/index.ts"],
+      "@p2plink/nestjs": ["packages/nestjs/src/index.ts"]
     }
   }
 }

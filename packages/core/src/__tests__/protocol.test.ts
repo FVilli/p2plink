@@ -24,7 +24,9 @@ describe("envelope protocol", () => {
   });
 
   it("rejects unknown types and malformed errors", () => {
-    expect(() => validateEnvelope({ ...createEnvelope("request", sid, null), type: "nope" })).toThrow();
+    expect(() =>
+      validateEnvelope({ ...createEnvelope("request", sid, null), type: "nope" }),
+    ).toThrow();
     expect(() =>
       validateEnvelope({ ...createEnvelope("error", sid, null), payload: { code: 1 } }),
     ).toThrow();
@@ -39,7 +41,7 @@ describe("envelope protocol", () => {
     });
     expect(() => validateEnvelope(env)).not.toThrow();
     expect(() =>
-      validateEnvelope({ ...env, payload: { ...env.payload as object, epoch: -1 } }),
+      validateEnvelope({ ...env, payload: { ...(env.payload as object), epoch: -1 } }),
     ).toThrow();
   });
 

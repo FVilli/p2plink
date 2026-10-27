@@ -10,6 +10,7 @@ import {
   sessionTopics,
   assertTopicPart,
   type Logger,
+  type SignalReset,
   type TransportState,
   type Unsubscribe,
 } from "@p2plink/core";
@@ -21,6 +22,8 @@ export interface MqttServerEndpointOptions {
   serverId: string;
   maxFrameBytes?: number;
   logger?: Logger;
+  /** Called when a secure frame arrives for a client with no session. */
+  onUnknownClient?: (clientId: string) => void;
 }
 
 interface ClientRegistration {
@@ -83,9 +86,7 @@ export class MqttServerEndpoint {
   private readonly connection: MqttConnection;
   private readonly options: MqttServerEndpointOptions;
   private readonly logger: Logger;
-  private readonly handshakeListeners = new Set<
-    (clientId: string, message: unknown) => void
-  >();
+  private readonly handshakeListeners = new Set<(clientId: string, message: unknown) => void>();
   private readonly clients = new Map<string, ClientRegistration>();
   private readonly lastResetAt = new Map<string, number>();
   private unsubscribe: Unsubscribe | null = null;
@@ -118,11 +119,13 @@ export class MqttServerEndpoint {
 
   forClient(clientId: string): MqttServerClientEndpoint {
     assertTopicPart("clientId", clientId);
-    let registration = this.clients.get(clientId);
-    if (!registration) {
-      registration = { frameListeners: new Set(), lastResetAt: 0 };
-      this.clients.set(clientId, registration);
-    }
+    // A new registration replaces any previous session for this client. The
+    // old endpoint's close() must not unregister the new one.
+    const registration: ClientRegistration = {
+      frameListeners: new Set(),
+      lastResetAt: 0,
+    };
+    this.clients.set(clientId, registration);
     return new MqttServerClientEndpoint(this, clientId, registration);
   }
 
@@ -142,23 +145,19 @@ export class MqttServerEndpoint {
     await this.connection.publish(topics.sessionS2c, payload, 1);
   }
 
-  async publishSessionReset(clientId: string, sessionId: string | undefined, reason: string): Promise<void> {
+  async publishSessionReset(clientId: string, reset: SignalReset): Promise<void> {
     const topics = sessionTopics({
       tenant: this.options.tenant,
       serverId: this.options.serverId,
       clientId,
     });
-    const reset = {
-      v: 1,
-      kind: "session-reset" as const,
-      ...(sessionId === undefined ? {} : { sessionId }),
-      reason,
-    };
     await this.connection.publish(topics.signalS2c, JSON.stringify(reset), 1);
   }
 
   unregisterClient(clientId: string, registration: ClientRegistration): void {
-    if (this.clients.get(clientId) === registration) this.clients.delete(clientId);
+    if (this.clients.get(clientId) === registration) {
+      this.clients.delete(clientId);
+    }
   }
 
   onFrameForClient(clientId: string, listener: (frame: Uint8Array) => void): Unsubscribe {
@@ -184,6 +183,10 @@ export class MqttServerEndpoint {
     if (!clientId) return;
     if (payload.length === 0) return;
     if (payload[0] === 0x01) {
+      if (payload.length > 32 * 1024) {
+        this.logger.warn("dropping oversized handshake", { clientId, size: payload.length });
+        return;
+      }
       let message: unknown;
       try {
         message = decodeHandshakeMessage(payload);
@@ -216,7 +219,11 @@ export class MqttServerEndpoint {
       const now = Date.now();
       if (now - (this.lastResetAt.get(clientId) ?? 0) > 5_000) {
         this.lastResetAt.set(clientId, now);
-        void this.publishSessionReset(clientId, undefined, "unknown-session").catch(() => undefined);
+        if (this.lastResetAt.size > 10_000) this.lastResetAt.clear();
+        this.logger.warn("secure frame for unknown client; requesting session reset", {
+          clientId,
+        });
+        this.options.onUnknownClient?.(clientId);
       }
       return;
     }

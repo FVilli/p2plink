@@ -9,16 +9,61 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/index.cjs" },
-    "./node": { "types": "./dist/node.d.ts", "import": "./dist/node.js", "require": "./dist/node.cjs" },
-    "./werift": { "types": "./dist/werift.d.ts", "import": "./dist/werift.js", "require": "./dist/werift.cjs" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js",
+      "require": "./dist/node.cjs"
+    },
+    "./werift": {
+      "types": "./dist/werift.d.ts",
+      "import": "./dist/werift.js",
+      "require": "./dist/werift.cjs"
+    }
   },
-  "files": ["dist", "README.md"],
-  "scripts": { "build": "tsup", "test": "vitest run", "typecheck": "tsc --noEmit" },
-  "dependencies": { "@p2plink/core": "workspace:*" },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@p2plink/core": "^0.1.0"
+  },
   "optionalDependencies": {
     "node-datachannel": "^0.33.5",
     "werift": "^0.25.2"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "webrtc",
+    "mqtt",
+    "p2p",
+    "rpc",
+    "typescript",
+    "fallback",
+    "datachannel"
+  ],
+  "homepage": "https://github.com/FVilli/p2plink#readme",
+  "bugs": {
+    "url": "https://github.com/FVilli/p2plink/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FVilli/p2plink.git",
+    "directory": "packages/webrtc"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

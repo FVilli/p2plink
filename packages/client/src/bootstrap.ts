@@ -116,7 +116,8 @@ export function validateBootstrapResult(value: unknown): BootstrapResult {
 function validateBootstrapUrl(raw: string, allowInsecureHttp: boolean): string {
   let url: URL;
   try {
-    url = new URL(raw);
+    const base = typeof globalThis.location === "object" ? globalThis.location.origin : undefined;
+    url = new URL(raw, base);
   } catch {
     throw new P2PLinkError(P2PLinkErrorCodes.INVALID_CONFIG, "Invalid bootstrap URL");
   }

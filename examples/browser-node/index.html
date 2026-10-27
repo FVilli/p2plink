@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>P2PLink — Browser ↔ Node demo</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>P2PLink</h1>
+        <p class="subtitle">Browser ↔ Node.js · WebRTC DataChannel con fallback MQTT</p>
+      </header>
+
+      <section class="panel status-panel">
+        <div class="status-row">
+          <span id="status-badge" class="badge" data-status="connecting">connecting</span>
+          <span id="transport" class="muted">transport: —</span>
+          <span id="rtt" class="muted">rtt: —</span>
+          <span id="pending" class="muted">pending: 0</span>
+        </div>
+        <div class="status-row">
+          <span id="session" class="mono muted">session: —</span>
+          <span id="client" class="mono muted">client: —</span>
+        </div>
+        <div id="error" class="error" hidden></div>
+      </section>
+
+      <section class="panel">
+        <div class="toolbar">
+          <button id="refresh">Aggiorna dati</button>
+          <button id="add">Aggiungi elemento</button>
+          <button id="info">Info sessione</button>
+          <button id="drop-p2p" class="danger">Simula guasto P2P</button>
+          <button id="emit">Invia evento</button>
+          <button id="suspend">Sospendi rete</button>
+          <button id="resume" disabled>Riconnetti</button>
+        </div>
+        <ul id="items" class="items"></ul>
+      </section>
+
+      <section class="panel">
+        <h2>Eventi e log</h2>
+        <pre id="log" class="log"></pre>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

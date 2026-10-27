@@ -11,8 +11,8 @@ export default defineConfig({
       { find: /^@p2plink\/webrtc$/, replacement: p("../webrtc/src/index.ts") },
       { find: /^@p2plink\/client\/node$/, replacement: p("../client/src/node.ts") },
       { find: /^@p2plink\/client$/, replacement: p("../client/src/index.ts") },
-      { find: /^@p2plink\/server$/, replacement: p("./src/index.ts") }
-    ]
+      { find: /^@p2plink\/server$/, replacement: p("./src/index.ts") },
+    ],
   },
-  test: { environment: "node", include: ["src/**/*.test.ts"], testTimeout: 60000 }
+  test: { environment: "node", include: ["src/**/*.test.ts"], testTimeout: 60000 },
 });

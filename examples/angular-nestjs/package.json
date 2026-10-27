@@ -1,0 +1,10 @@
+{
+  "name": "@p2plink/example-angular-nestjs",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build": "pnpm --filter @p2plink/example-nest-server build && pnpm --filter @p2plink/example-angular-web build",
+    "dev": "pnpm --filter @p2plink/example-nest-server dev & pnpm --filter @p2plink/example-angular-web dev",
+    "start": "node server/dist/main.js"
+  }
+}

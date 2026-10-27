@@ -68,8 +68,7 @@ export class TransportManager {
   private readonly now: () => number;
   private readonly idFactory: () => string;
   private readonly onTransportChange:
-    | ((from: TransportKind | null, to: TransportKind | null) => void)
-    | undefined;
+    ((from: TransportKind | null, to: TransportKind | null) => void) | undefined;
   private readonly onUnhealthy: ((kind: TransportKind) => void) | undefined;
 
   private readonly health: Record<TransportKind, TransportHealth> = {
@@ -260,7 +259,10 @@ export class TransportManager {
     });
   }
 
-  async send(envelope: ReturnType<typeof createEnvelope>, options: TransportSendOptions = {}): Promise<TransportKind> {
+  async send(
+    envelope: ReturnType<typeof createEnvelope>,
+    options: TransportSendOptions = {},
+  ): Promise<TransportKind> {
     const kind = options.via ?? this.active;
     if (!kind) {
       throw new P2PLinkError(P2PLinkErrorCodes.OFFLINE, "No usable transport");
@@ -341,7 +343,11 @@ export class TransportManager {
       if (now - ping.sentAt > this.limits.heartbeatTimeoutMs) {
         this.pendingPings.delete(id);
         this.health[ping.kind].sendFailures += 1;
-        this.logger.warn("heartbeat timed out", { transport: ping.kind });
+        this.logger.warn("heartbeat timed out", {
+          transport: ping.kind,
+          pingId: id,
+          ageMs: now - ping.sentAt,
+        });
       }
     }
     for (const kind of ["mqtt", "webrtc"] as const) {
@@ -366,7 +372,10 @@ export class TransportManager {
     });
   }
 
-  private async sendDirect(kind: TransportKind, envelope: ReturnType<typeof createEnvelope>): Promise<void> {
+  private async sendDirect(
+    kind: TransportKind,
+    envelope: ReturnType<typeof createEnvelope>,
+  ): Promise<void> {
     const transport = this.transports[kind];
     if (!transport || transport.state !== "open") return;
     const plaintext = encodeEnvelopeJson(envelope, this.limits.maxFrameBytes);
@@ -473,7 +482,8 @@ export class TransportManager {
     let status: ConnectionStatus;
     if (this.active === "webrtc") status = "p2p";
     else if (this.active === "mqtt") status = "mqtt";
-    else if (anyOpen || anyConnecting) status = this.connectedAt !== null ? "reconnecting" : "connecting";
+    else if (anyOpen || anyConnecting)
+      status = this.connectedAt !== null ? "reconnecting" : "connecting";
     else status = this.started ? "offline" : "connecting";
     if (status !== this.status) {
       this.status = status;

@@ -10,7 +10,11 @@ services:
       - ./aclfile:/mosquitto/config/aclfile:ro
       - ./passwd:/mosquitto/config/passwd:ro
     healthcheck:
-      test: ["CMD-SHELL", "mosquitto_sub -h 127.0.0.1 -p 1883 -u p2plink-server -P server-dev-password -t '$$SYS/#' -C 1 -W 3 || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "mosquitto_pub -h 127.0.0.1 -p 1883 -u p2plink-server -P server-dev-password -t 'p2plink/v1/health/health/session/health/s2c' -m ok",
+        ]
       interval: 5s
       timeout: 4s
       retries: 10

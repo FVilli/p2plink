@@ -1,12 +1,4 @@
-import {
-  P2PLinkError,
-  P2PLinkErrorCodes,
-  concatBytes,
-  equalBytes,
-  fromBase64Url,
-  toBase64Url,
-  type TransportKind,
-} from "@p2plink/core";
+import { P2PLinkError, P2PLinkErrorCodes, equalBytes, type TransportKind } from "@p2plink/core";
 import type { DerivedSession, DirectionalKeys } from "./handshake.js";
 import { ReplayWindow } from "./replay.js";
 import { randomBytes, utf8Encode } from "./encoding.js";
@@ -76,7 +68,12 @@ export class FrameCipher {
     const aad = buildAad(this.transport, this.sessionId, sequence);
     const ciphertext = new Uint8Array(
       await globalThis.crypto.subtle.encrypt(
-        { name: "AES-GCM", iv: iv as BufferSource, additionalData: aad as BufferSource, tagLength: 128 },
+        {
+          name: "AES-GCM",
+          iv: iv as BufferSource,
+          additionalData: aad as BufferSource,
+          tagLength: 128,
+        },
         this.sendKey,
         plaintext as BufferSource,
       ),

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { P2PLinkError, P2PLinkErrorCodes } from "../errors.js";
 import { MemoryIdempotencyStore } from "../idempotency.js";
 import type { Envelope } from "../protocol-types.js";
@@ -24,7 +24,10 @@ function makePair() {
     serverId: "server-1",
     transport: "mqtt",
   };
-  const client = new RpcClient<Record<string, { request: unknown; response: unknown }>, {}>({
+  const client = new RpcClient<
+    Record<string, { request: unknown; response: unknown }>,
+    Record<string, never>
+  >({
     sessionId: sid,
     timeoutMs: 1000,
     maxPendingRequests: 8,
@@ -40,10 +43,14 @@ function makePair() {
 describe("RPC", () => {
   it("routes typed requests and responses", async () => {
     const { server, client } = makePair();
-    server.register("users.get", (request) => ({ id: (request as { id: string }).id, name: "Ada" }));
-    await expect(
-      client.request("users.get", { id: "1" } as never),
-    ).resolves.toEqual({ id: "1", name: "Ada" });
+    server.register("users.get", (request) => ({
+      id: (request as { id: string }).id,
+      name: "Ada",
+    }));
+    await expect(client.request("users.get", { id: "1" } as never)).resolves.toEqual({
+      id: "1",
+      name: "Ada",
+    });
   });
 
   it("returns typed errors", async () => {
@@ -76,13 +83,76 @@ describe("RPC", () => {
     expect(calls).toBe(1);
   });
 
+  it("does not disclose a cached result across methods using the same idempotency key", async () => {
+    const { server, client } = makePair();
+    server.register("secret.read", () => ({ secret: "top-secret" }));
+    server.register("public.read", () => ({ public: "ok" }));
+    const secret = await client.request("secret.read", undefined as never, {
+      idempotent: true,
+      idempotencyKey: "reused-key",
+    });
+    const publicResult = await client.request("public.read", undefined as never, {
+      idempotent: true,
+      idempotencyKey: "reused-key",
+    });
+    expect(secret).toEqual({ secret: "top-secret" });
+    expect(publicResult).toEqual({ public: "ok" });
+  });
+
+  it("retries an idempotent request when the transport changes during an in-flight send", async () => {
+    let attempts = 0;
+    let rejectFirst: ((error: unknown) => void) | undefined;
+    let requestId = "";
+    const client = new RpcClient<
+      Record<string, { request: unknown; response: unknown }>,
+      Record<string, never>
+    >({
+      sessionId: sid,
+      timeoutMs: 2_000,
+      maxPendingRequests: 8,
+      send: async (envelope) => {
+        attempts += 1;
+        requestId = envelope.id;
+        if (attempts === 1) {
+          return new Promise<"mqtt">((_resolve, reject) => {
+            rejectFirst = reject;
+          });
+        }
+        return "webrtc";
+      },
+    });
+    const promise = client.request("read", undefined as never, { idempotent: true });
+    await Promise.resolve();
+    client.handleTransportChange("mqtt", "webrtc");
+    rejectFirst?.(
+      new P2PLinkError(P2PLinkErrorCodes.TRANSPORT_SEND_FAILED, "delayed failure", {
+        retryable: true,
+        outcomeUnknown: true,
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(attempts).toBe(2);
+    client.handleEnvelope({
+      v: 1,
+      id: "response-after-retry",
+      sid,
+      type: "response",
+      ts: Date.now(),
+      cid: requestId,
+      payload: "ok",
+    });
+    await expect(promise).resolves.toBe("ok");
+  });
+
   it("times out and reports unknown outcome for mutative requests", async () => {
     const { server, client } = makePair();
     server.register("slow", async () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
       return "late";
     });
-    await expect(client.request("slow", undefined as never, { timeoutMs: 20 })).rejects.toMatchObject({
+    await expect(
+      client.request("slow", undefined as never, { timeoutMs: 20 }),
+    ).rejects.toMatchObject({
       code: P2PLinkErrorCodes.OUTCOME_UNKNOWN,
       outcomeUnknown: true,
     });
@@ -90,7 +160,10 @@ describe("RPC", () => {
 
   it("retransmits idempotent pending requests on transport change", async () => {
     const sent: Envelope[] = [];
-    const client = new RpcClient({
+    const client = new RpcClient<
+      Record<string, { request: unknown; response: unknown }>,
+      Record<string, unknown>
+    >({
       sessionId: sid,
       timeoutMs: 5000,
       maxPendingRequests: 8,

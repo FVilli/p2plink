@@ -8,5 +8,5 @@ export default defineConfig({
   target: "es2022",
   treeshake: true,
   splitting: false,
-  external: ["node-datachannel", "node-datachannel/polyfill", "werift"]
+  external: ["node-datachannel", "node-datachannel/polyfill", "werift"],
 });

@@ -1,6 +1,7 @@
 import { P2PLinkError, P2PLinkErrorCodes } from "./errors.js";
 import type { IdempotencyStore, StoredRpcOutcome } from "./idempotency.js";
 import { createEnvelope } from "./protocol.js";
+import { canonicalJson, sha256Base64Url } from "./util.js";
 import type { Envelope } from "./protocol-types.js";
 import type { JsonObject, Logger, TransportKind } from "./types.js";
 import { noopLogger } from "./types.js";
@@ -24,7 +25,10 @@ export interface RpcHandlerContext {
   signal: AbortSignal;
 }
 
-export type RpcHandler = (request: unknown, context: RpcHandlerContext) => unknown | Promise<unknown>;
+export type RpcHandler = (
+  request: unknown,
+  context: RpcHandlerContext,
+) => unknown | Promise<unknown>;
 
 export interface RpcHandlerOptions {
   timeoutMs?: number;
@@ -42,6 +46,7 @@ export interface RpcServerOptions {
   idempotency: IdempotencyStore;
   defaultTimeoutMs: number;
   idempotencyTtlMs?: number;
+  maxPayloadBytes?: number;
   logger?: Logger;
   authorize?: RpcAuthorizer;
   now?: () => number;
@@ -51,7 +56,9 @@ const METHOD_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/u;
 
 export class RpcServer {
   private readonly handlers = new Map<string, RegisteredHandler>();
-  private readonly options: Required<Pick<RpcServerOptions, "defaultTimeoutMs" | "idempotencyTtlMs">> &
+  private readonly options: Required<
+    Pick<RpcServerOptions, "defaultTimeoutMs" | "idempotencyTtlMs">
+  > &
     RpcServerOptions;
   private readonly logger: Logger;
 
@@ -96,6 +103,21 @@ export class RpcServer {
     }
     const method = (payload as { method: string }).method;
     const params = (payload as { params?: unknown }).params;
+    const maxPayloadBytes = this.options.maxPayloadBytes ?? 64 * 1024;
+    try {
+      const encoded = JSON.stringify(params ?? null);
+      if (new TextEncoder().encode(encoded).length > maxPayloadBytes) {
+        return this.errorEnvelope(
+          envelope,
+          new P2PLinkError(P2PLinkErrorCodes.PAYLOAD_TOO_LARGE, "Request payload too large"),
+        );
+      }
+    } catch {
+      return this.errorEnvelope(
+        envelope,
+        new P2PLinkError(P2PLinkErrorCodes.PROTOCOL, "Request payload is not JSON serializable"),
+      );
+    }
     const registered = this.handlers.get(method);
     if (!registered) {
       return this.errorEnvelope(
@@ -103,7 +125,40 @@ export class RpcServer {
         new P2PLinkError(P2PLinkErrorCodes.METHOD_NOT_FOUND, `Unknown method: ${method}`),
       );
     }
-    const key = `${base.clientId}\u0000${envelope.idem ?? envelope.id}`;
+    const controller = new AbortController();
+    const timeoutMs = registered.options.timeoutMs ?? this.options.defaultTimeoutMs;
+    const context: RpcHandlerContext = {
+      ...base,
+      requestId: envelope.id,
+      method,
+      signal: controller.signal,
+    };
+    if (this.options.authorize) {
+      try {
+        await this.options.authorize(context);
+      } catch (error) {
+        const normalized =
+          error instanceof P2PLinkError
+            ? error
+            : new P2PLinkError(P2PLinkErrorCodes.HANDLER_ERROR, "Authorization failed", {
+                cause: error,
+              });
+        return this.errorEnvelope(envelope, normalized);
+      }
+    }
+
+    let requestFingerprint: string;
+    try {
+      requestFingerprint = await sha256Base64Url(canonicalJson({ method, params: params ?? null }));
+    } catch (error) {
+      return this.errorEnvelope(
+        envelope,
+        new P2PLinkError(P2PLinkErrorCodes.PROTOCOL, "Request payload is not canonical JSON", {
+          cause: error,
+        }),
+      );
+    }
+    const key = `${base.identity.subject}\u0000${base.clientId}\u0000${method}\u0000${requestFingerprint}\u0000${envelope.idem ?? envelope.id}`;
     const ttl = this.options.idempotencyTtlMs;
     let claim = await this.options.idempotency.claim(key, ttl);
     if (claim.status === "completed") {
@@ -127,14 +182,6 @@ export class RpcServer {
       );
     }
 
-    const controller = new AbortController();
-    const timeoutMs = registered.options.timeoutMs ?? this.options.defaultTimeoutMs;
-    const context: RpcHandlerContext = {
-      ...base,
-      requestId: envelope.id,
-      method,
-      signal: controller.signal,
-    };
     let settled = false;
     const finish = async (outcome: StoredRpcOutcome): Promise<void> => {
       if (settled) return;
@@ -148,7 +195,6 @@ export class RpcServer {
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      if (this.options.authorize) await this.options.authorize(context);
       const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {
           controller.abort();

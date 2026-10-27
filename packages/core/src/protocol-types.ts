@@ -1,14 +1,7 @@
 import type { SerializedError } from "./types.js";
 
 export type EnvelopeType =
-  | "request"
-  | "response"
-  | "error"
-  | "event"
-  | "ping"
-  | "pong"
-  | "close"
-  | "signal";
+  "request" | "response" | "error" | "event" | "ping" | "pong" | "close" | "signal";
 
 export interface Envelope {
   v: 1;
@@ -77,8 +70,12 @@ export type SignalPayload = SignalOffer | SignalAnswer | SignalIce | SignalBye;
 export interface SignalReset {
   v: 1;
   kind: "session-reset";
+  clientId?: string;
   sessionId?: string;
   reason: string;
+  issuedAt?: number;
+  /** ECDSA P-256/SHA-256 over the canonical reset payload. */
+  signature?: string;
 }
 
 export type ErrorEnvelopePayload = SerializedError;
