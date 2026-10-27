@@ -48,7 +48,7 @@ Il namespace è passato a `v2` per isolare le vecchie schede che pubblicavano pr
 - il reset chiede conferma prima di azzerare i contatori;
 - il riepilogo mostra `Peers` senza due punti, con il numero in grassetto sotto, poi `Outbound` e `Inbound` con P2P e MQTT;
 - i problemi recenti scompaiono automaticamente dopo 60 secondi;
-- l'app demo usa la versione `0.2.0`.
+- l'app demo usa la versione `0.2.1`.
 
 ## Tre frontend identici
 
@@ -210,7 +210,7 @@ La password viene gestita dall'onboarding, non da una variabile di build.
 | `MQTT_URL`             | `mqtts://mqtt.fvsg.it:8883`    | URL broker                                             |
 | `MQTT_USERNAME`        | `main:rmq-usr`                 | username broker                                        |
 | `MQTT_PASSWORD`        | —                              | password broker, obbligatoria                          |
-| `APP_VERSION`          | `0.2.0`                        | versione mostrata nella presence/console               |
+| `APP_VERSION`          | `0.2.1`                        | versione mostrata nella presence/console               |
 | `PING_BYTES`           | `2048`                         | dimensione random payload ping                         |
 | `PRESENCE_INTERVAL_MS` | `30000`                        | intervallo presence; minimo 1000 ms                    |
 | `STUN_URLS`            | `stun:stun.l.google.com:19302` | STUN demo, separati da virgola; vuoto per disabilitare |

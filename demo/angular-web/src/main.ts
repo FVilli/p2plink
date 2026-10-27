@@ -11,7 +11,7 @@ import {
 } from "@p2plink/demo-mesh";
 import { createBrowserWebRtcEngine } from "@p2plink/webrtc";
 
-const VERSION = "0.2.0",
+const VERSION = "0.2.1",
   KEY = "p2plink-demo-config",
   DEFAULT_URL = "wss://mqtt-ws.fvsg.it:443/ws",
   DEFAULT_USERNAME = "main:rmq-usr";
