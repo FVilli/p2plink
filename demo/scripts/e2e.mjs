@@ -195,7 +195,9 @@ try {
         route: row.getAttribute("data-route") ?? "",
         rtt: Number(row.getAttribute("data-rtt") ?? 0),
         p2pBytes: Number(row.getAttribute("data-p2p-bytes") ?? 0),
+        p2pMessages: Number(row.getAttribute("data-p2p-messages") ?? 0),
         mqttBytes: Number(row.getAttribute("data-mqtt-bytes") ?? 0),
+        mqttMessages: Number(row.getAttribute("data-mqtt-messages") ?? 0),
         p2pRate: Number(row.getAttribute("data-p2p-rate") ?? 0),
         mqttRate: Number(row.getAttribute("data-mqtt-rate") ?? 0),
         pings: Number(row.getAttribute("data-pings") ?? 0),
@@ -259,6 +261,9 @@ try {
     { timeout: 40_000 },
   );
   const p2pBefore = await peerRows(pageA);
+  if (!p2pBefore.some((row) => row.p2pMessages > 0)) {
+    throw new Error("P2P message counters were not populated");
+  }
   console.log(
     "4. P2P ping traffic observed",
     p2pBefore.filter((row) => row.p2pBytes > 0),
@@ -316,6 +321,18 @@ try {
     { timeout: 40_000 },
   );
   console.log("7. P2P restored and ping bytes continue on DataChannel");
+
+  await pageA.evaluate(() => {
+    window.dispatchEvent(new ErrorEvent("error", { message: "e2e diagnostic issue" }));
+  });
+  await pageB.waitForFunction(
+    () =>
+      document.querySelector("#issues")?.hasAttribute("hidden") === false &&
+      document.querySelector("#issue-list")?.textContent?.includes("e2e diagnostic issue"),
+    null,
+    { timeout: 15_000 },
+  );
+  console.log("7b. MQTT issue published from browser A and received by browser B");
 
   const contextC = await browser.newContext();
   const pageC = await contextC.newPage();

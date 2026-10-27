@@ -1,5 +1,6 @@
 import {
   createMeshPeer,
+  type MeshIssue,
   type MeshPeer,
   type MeshSnapshot,
   type PeerStats,
@@ -37,6 +38,8 @@ const configError = byId<HTMLParagraphElement>("config-error");
 const editConfigButton = byId<HTMLButtonElement>("edit-config");
 const offlineBanner = byId<HTMLDivElement>("offline-banner");
 const appVersion = byId<HTMLSpanElement>("app-version");
+const issuesSection = byId<HTMLElement>("issues");
+const issueList = byId<HTMLUListElement>("issue-list");
 appVersion.textContent = `v${APP_VERSION}`;
 
 const env = import.meta.env;
@@ -66,14 +69,47 @@ const cell = (value: unknown) => {
   return td;
 };
 const number = (value: number | null) => (value === null ? "—" : value.toFixed(1));
+const routeLabel = (route: PeerStats["route"]) =>
+  route === "p2p" ? "🟢 p2p" : route === "mqtt" ? "🟡 mqtt" : "⏳ connecting";
+const issueContext = (extra: Record<string, string | number | boolean> = {}) => ({
+  online: navigator.onLine,
+  secureContext: window.isSecureContext,
+  pageProtocol: location.protocol,
+  userAgent: navigator.userAgent,
+  ...extra,
+});
+
+function renderIssues(issues: MeshIssue[]): void {
+  issuesSection.hidden = issues.length === 0;
+  issueList.replaceChildren(
+    ...issues.slice(0, 12).map((issue) => {
+      const item = document.createElement("li");
+      const level = document.createElement("span");
+      level.className = `issue-${issue.level}`;
+      level.textContent = issue.level === "error" ? "❌" : "⚠️";
+      const text = document.createElement("span");
+      text.textContent = ` ${issue.name} v${issue.version}: ${issue.message}`;
+      const meta = document.createElement("span");
+      meta.className = "issue-meta";
+      const context = Object.entries(issue.context)
+        .map(([key, value]) => `${key}=${String(value)}`)
+        .join(" ");
+      meta.textContent = ` (${new Date(issue.ts).toLocaleTimeString()} ${issue.peerId}${context ? ` ${context}` : ""})`;
+      item.append(level, text, meta);
+      return item;
+    }),
+  );
+}
 
 function render(snapshot: MeshSnapshot): void {
   broker.dataset.connected = String(snapshot.brokerConnected);
-  broker.textContent = `Broker: ${snapshot.brokerConnected ? "connected" : "disconnected"}`;
-  self.textContent = `${snapshot.self.name} (${snapshot.self.peerId})`;
+  broker.textContent = snapshot.brokerConnected
+    ? "🟢 Broker: connected"
+    : "🔴 Broker: disconnected";
+  self.textContent = `🪪 ${snapshot.self.name} (${snapshot.self.peerId})`;
   appVersion.textContent = `v${snapshot.self.version}`;
   toggle.checked = snapshot.webRtcEnabled;
-  totals.innerHTML = `<span>Peers: ${snapshot.totals.peers}</span><span>P2P: ${snapshot.totals.p2pBytes} B (${number(snapshot.totals.p2pBytesPerSec)} B/s)</span><span>MQTT: ${snapshot.totals.mqttBytes} B (${number(snapshot.totals.mqttBytesPerSec)} B/s)</span>`;
+  totals.innerHTML = `<span>👥 Peers: ${snapshot.totals.peers}</span><span>📤📥 P2P: ${snapshot.totals.p2pMessages} msg / ${snapshot.totals.p2pBytes} B (${number(snapshot.totals.p2pBytesPerSec)} B/s)</span><span>📤📥 MQTT: ${snapshot.totals.mqttMessages} msg / ${snapshot.totals.mqttBytes} B (${number(snapshot.totals.mqttBytesPerSec)} B/s)</span>`;
   body.replaceChildren(
     ...snapshot.peers.map((p: PeerStats) => {
       const tr = document.createElement("tr");
@@ -83,13 +119,31 @@ function render(snapshot: MeshSnapshot): void {
       tr.dataset.route = p.route;
       tr.dataset.rtt = String(p.rttMs ?? 0);
       tr.dataset.p2pBytes = String(p.p2pBytes);
+      tr.dataset.p2pMessages = String(p.p2pMessages);
       tr.dataset.mqttBytes = String(p.mqttBytes);
+      tr.dataset.mqttMessages = String(p.mqttMessages);
+      tr.dataset.p2pTxMessages = String(p.traffic.tx.p2p.messages);
+      tr.dataset.p2pRxMessages = String(p.traffic.rx.p2p.messages);
+      tr.dataset.mqttTxMessages = String(p.traffic.tx.mqtt.messages);
+      tr.dataset.mqttRxMessages = String(p.traffic.rx.mqtt.messages);
       tr.dataset.p2pRate = String(p.p2pBytesPerSec);
       tr.dataset.mqttRate = String(p.mqttBytesPerSec);
       tr.dataset.pings = String(p.pings);
       tr.dataset.roundTrips = String(p.roundTrips);
-      const route = cell(p.route);
+      const route = cell(routeLabel(p.route));
       route.className = `route ${p.route}`;
+      const p2pMessages = cell(p.p2pMessages);
+      p2pMessages.title = `tx ${p.traffic.tx.p2p.messages} / rx ${p.traffic.rx.p2p.messages}${
+        p.remoteTraffic
+          ? ` · peer reports tx ${p.remoteTraffic.tx.p2p.messages} / rx ${p.remoteTraffic.rx.p2p.messages}`
+          : ""
+      }`;
+      const mqttMessages = cell(p.mqttMessages);
+      mqttMessages.title = `tx ${p.traffic.tx.mqtt.messages} / rx ${p.traffic.rx.mqtt.messages}${
+        p.remoteTraffic
+          ? ` · peer reports tx ${p.remoteTraffic.tx.mqtt.messages} / rx ${p.remoteTraffic.rx.mqtt.messages}`
+          : ""
+      }`;
       tr.append(
         cell(p.name),
         cell(p.version),
@@ -97,7 +151,9 @@ function render(snapshot: MeshSnapshot): void {
         route,
         cell(number(p.rttMs)),
         cell(p.p2pBytes),
+        p2pMessages,
         cell(p.mqttBytes),
+        mqttMessages,
         cell(number(p.p2pBytesPerSec)),
         cell(number(p.mqttBytesPerSec)),
         cell(p.pings),
@@ -107,6 +163,7 @@ function render(snapshot: MeshSnapshot): void {
       return tr;
     }),
   );
+  renderIssues(snapshot.recentIssues);
 }
 
 function loadStoredConfig(): DemoConfig | null {
@@ -197,8 +254,8 @@ async function stopPeer(): Promise<void> {
   body.replaceChildren();
   totals.textContent = "";
   broker.dataset.connected = "false";
-  broker.textContent = "Broker: disconnected";
-  self.textContent = "Not connected";
+  broker.textContent = "🔴 Broker: disconnected";
+  self.textContent = "🪪 Not connected";
 }
 
 async function connect(config: DemoConfig): Promise<void> {
@@ -228,6 +285,8 @@ async function connect(config: DemoConfig): Promise<void> {
     pingBytes,
     iceServers,
     version: APP_VERSION,
+    platform: navigator.userAgent,
+    presenceIntervalMs: 30_000,
     engine: createBrowserWebRtcEngine(),
   });
   peer = mesh;
@@ -242,6 +301,16 @@ async function connect(config: DemoConfig): Promise<void> {
     editConfigButton.disabled = true;
     errorBox.hidden = false;
     errorBox.textContent = `Connessione fallita: ${error instanceof Error ? error.message : String(error)}`;
+    void mesh.reportIssue(
+      "error",
+      "browser connect failed",
+      issueContext({
+        phase: "mesh-start",
+        brokerHost: new URL(config.url).host,
+        brokerProtocol: new URL(config.url).protocol,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    );
     if (!navigator.onLine) {
       updateOnlineState();
     } else {
@@ -268,7 +337,7 @@ function updateOnlineState(): void {
   offlineBanner.hidden = !offline;
   if (offline && !peer) {
     broker.dataset.connected = "false";
-    broker.textContent = "Broker: offline";
+    broker.textContent = "⚪ Broker: offline";
   }
 }
 
@@ -278,6 +347,37 @@ window.addEventListener("online", () => {
 });
 window.addEventListener("offline", () => {
   updateOnlineState();
+});
+
+window.addEventListener("error", (event) => {
+  peer?.reportIssue(
+    "error",
+    event.message || "window error",
+    issueContext({
+      source: "window-error",
+      filename: event.filename || "-",
+      line: event.lineno || 0,
+    }),
+  );
+});
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason instanceof Error ? event.reason.message : String(event.reason);
+  peer?.reportIssue(
+    "error",
+    "unhandled rejection",
+    issueContext({ source: "promise", error: reason }),
+  );
+});
+window.addEventListener("securitypolicyviolation", (event) => {
+  peer?.reportIssue(
+    "error",
+    "security policy violation",
+    issueContext({
+      source: "csp",
+      directive: event.violatedDirective,
+      blockedURI: event.blockedURI,
+    }),
+  );
 });
 
 toggle.addEventListener("change", () => peer?.setWebRtcEnabled(toggle.checked));

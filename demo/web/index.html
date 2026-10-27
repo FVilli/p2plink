@@ -47,6 +47,7 @@
       </section>
       <div id="error" role="alert" hidden></div>
       <section class="totals" id="totals"></section>
+      <h2 class="section-title">🔗 Connected peers</h2>
       <div class="table-wrap">
         <table id="peers">
           <thead>
@@ -57,7 +58,9 @@
               <th>Route</th>
               <th>RTT ms</th>
               <th>P2P bytes</th>
+              <th>P2P msgs</th>
               <th>MQTT bytes</th>
+              <th>MQTT msgs</th>
               <th>P2P B/s</th>
               <th>MQTT B/s</th>
               <th>Pings</th>
@@ -68,6 +71,10 @@
           <tbody></tbody>
         </table>
       </div>
+      <section class="issues" id="issues" hidden>
+        <h2 class="section-title">🐞 Problemi recenti</h2>
+        <ul id="issue-list"></ul>
+      </section>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

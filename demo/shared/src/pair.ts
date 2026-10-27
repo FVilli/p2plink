@@ -33,7 +33,15 @@ import { WebRtcTransport } from "@p2plink/webrtc";
 import { RateMeter } from "./rate.js";
 import { verifyPingPayload } from "./ping.js";
 import { DEMO_CAPABILITY, DEMO_SERVER_ID, DEMO_TENANT, dataTopic, signalTopic } from "./topics.js";
-import type { HandshakeMessage, PairView, PeerKind, PeerRoute, RemotePeer } from "./types.js";
+import type {
+  HandshakeMessage,
+  IssueLevel,
+  PairView,
+  PeerKind,
+  PeerRoute,
+  RemotePeer,
+  TrafficView,
+} from "./types.js";
 
 const MAX_FRAME_BYTES = 262_144;
 const HANDSHAKE_TIMEOUT_MS = 8_000;
@@ -53,6 +61,11 @@ export interface PairContext {
   logger: Logger;
   webRtcEnabled: () => boolean;
   onChange: () => void;
+  reportIssue: (
+    level: IssueLevel,
+    message: string,
+    context?: Record<string, string | number | boolean>,
+  ) => void;
 }
 
 interface PendingPing {
@@ -113,6 +126,10 @@ export class PairSession {
 
   get isClosed(): boolean {
     return this.closed;
+  }
+
+  traffic(): TrafficView {
+    return this.meter.snapshot().traffic;
   }
 
   canPing(): boolean {
@@ -318,6 +335,10 @@ export class PairSession {
         peerId: this.remote.peerId,
         error: this.lastError,
       });
+      this.ctx.reportIssue("warn", "pair transport not ready", {
+        peerId: this.remote.peerId,
+        error: this.lastError,
+      });
       this.close("transport not ready");
       return;
     }
@@ -366,6 +387,10 @@ export class PairSession {
     } catch (error) {
       this.lastError = P2PLinkError.from(error).message;
       this.ctx.logger.warn("encrypted signaling rejected", {
+        peerId: this.remote.peerId,
+        error: this.lastError,
+      });
+      this.ctx.reportIssue("warn", "encrypted signaling rejected", {
         peerId: this.remote.peerId,
         error: this.lastError,
       });
@@ -423,7 +448,7 @@ export class PairSession {
     this.inFlight = { id, envelopeId: envelope.id, size: bytes.length, sentAt, timer };
     try {
       const kind = await this.manager.send(envelope);
-      this.meter.add(kind, bytes.length);
+      this.meter.addTx(kind, bytes.length);
       this.pings += 1;
       this.lastPingAt = sentAt;
       this.ctx.onChange();
@@ -433,6 +458,10 @@ export class PairSession {
         this.inFlight = null;
       }
       this.lastError = P2PLinkError.from(error).message;
+      this.ctx.reportIssue("warn", "ping send failed", {
+        peerId: this.remote.peerId,
+        error: this.lastError,
+      });
       this.ctx.onChange();
     }
   }
@@ -456,7 +485,7 @@ export class PairSession {
       bytes = null;
     }
     const received = bytes?.length ?? 0;
-    if (received > 0) this.meter.add(transport, received);
+    this.meter.addRx(transport, received);
     const verified = await verifyPingPayload({
       size: expectedSize,
       bytes: encoded ?? "",
@@ -500,7 +529,7 @@ export class PairSession {
     );
     try {
       const kind = await this.manager.send(envelope);
-      if (echo) this.meter.add(kind, echo.size);
+      this.meter.addTx(kind, echo?.size ?? 0);
     } catch (errorValue) {
       this.lastError = P2PLinkError.from(errorValue).message;
       this.ctx.onChange();
@@ -541,7 +570,7 @@ export class PairSession {
       if ((await sha256Base64Url(bytes)) !== hash) {
         throw new Error("response hash mismatch");
       }
-      this.meter.add(transport, bytes.length);
+      this.meter.addRx(transport, bytes.length);
       this.roundTrips += 1;
       this.rttMs = Math.max(0, Date.now() - pending.sentAt);
       this.lastError = null;
@@ -585,6 +614,10 @@ export class PairSession {
         await transport.start();
       } catch (error) {
         this.lastError = P2PLinkError.from(error).message;
+        this.ctx.reportIssue("warn", "webrtc start failed", {
+          peerId: this.remote.peerId,
+          error: this.lastError,
+        });
         if (this.webrtc === transport) {
           this.webrtc = null;
           this.manager.setTransport("webrtc", undefined);
@@ -596,6 +629,10 @@ export class PairSession {
 
   private restartWebRtc(reason: string): void {
     this.lastError = reason;
+    this.ctx.reportIssue("warn", "webrtc restart", {
+      peerId: this.remote.peerId,
+      reason,
+    });
     const current = this.webrtc;
     this.webrtc = null;
     if (current) void current.close();
@@ -619,6 +656,7 @@ export class PairSession {
       this.webrtc = null;
       if (current) void current.close();
       this.manager?.setTransport("webrtc", undefined);
+      this.manager?.probeNow();
       this.route = "mqtt";
       this.ctx.onChange();
     } else if (this.ready) {
@@ -647,8 +685,12 @@ export class PairSession {
       rttMs: this.rttMs,
       p2pBytes: rate.p2pBytes,
       mqttBytes: rate.mqttBytes,
+      p2pMessages: rate.p2pMessages,
+      mqttMessages: rate.mqttMessages,
       p2pBytesPerSec: rate.p2pBytesPerSec,
       mqttBytesPerSec: rate.mqttBytesPerSec,
+      traffic: rate.traffic,
+      remoteTraffic: this.remote.traffic,
       pings: this.pings,
       roundTrips: this.roundTrips,
       lastPingAt: this.lastPingAt,
@@ -703,6 +745,10 @@ export class PairSession {
   private failHandshake(message: string): void {
     if (this.closed || this.ready) return;
     this.lastError = message;
+    this.ctx.reportIssue("warn", "pair handshake failed", {
+      peerId: this.remote.peerId,
+      error: message,
+    });
     this.ctx.onChange();
     this.ctx.logger.warn("pair handshake failed", {
       peerId: this.remote.peerId,

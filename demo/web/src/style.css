@@ -173,3 +173,31 @@ th {
   font-weight: 600;
   border-bottom: 1px solid #9b6a1e;
 }
+
+.section-title {
+  margin: 22px 0 8px;
+  font-size: 18px;
+}
+.issues {
+  margin: 22px 0;
+  padding: 16px;
+  background: #1a2230;
+  border: 1px solid #5b3b42;
+  border-radius: 8px;
+}
+.issues ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.issues li {
+  margin: 7px 0;
+  color: #ffd2d2;
+  font-size: 13px;
+}
+.issues .issue-meta {
+  color: #9aa8ba;
+}
+.issues .issue-error {
+  color: #ff9c9c;
+  font-weight: 600;
+}

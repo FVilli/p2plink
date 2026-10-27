@@ -13,6 +13,11 @@ export class MeshService implements OnModuleInit, OnApplicationShutdown {
     name: process.env.PEER_NAME ?? `nest-${crypto.randomUUID().slice(0, 6)}`,
     kind: "nest",
     version: process.env.APP_VERSION ?? "0.1.0",
+    platform: `${process.platform}/${process.arch}`,
+    presenceIntervalMs: (() => {
+      const configured = Number(process.env.PRESENCE_INTERVAL_MS ?? 30_000);
+      return Number.isFinite(configured) && configured >= 1_000 ? configured : 30_000;
+    })(),
     pingBytes: Number(process.env.PING_BYTES ?? 2048),
     iceServers:
       process.env.STUN_URLS === ""
@@ -49,14 +54,18 @@ export class MeshService implements OnModuleInit, OnApplicationShutdown {
     if (process.stdout.isTTY) process.stdout.write("\x1b[2J\x1b[H");
     const header = [
       "PEER",
+      "VER",
       "KIND",
       "ROUTE",
       "RTT",
       "P2P_B",
+      "P2P_M",
       "MQTT_B",
+      "MQTT_M",
       "P2P_B/s",
       "MQTT_B/s",
       "PINGS",
+      "OK",
       "ERROR",
     ];
     const rows = snapshot.peers.map((peer) => [
@@ -66,7 +75,9 @@ export class MeshService implements OnModuleInit, OnApplicationShutdown {
       peer.route,
       peer.rttMs === null ? "-" : `${peer.rttMs}ms`,
       String(peer.p2pBytes),
+      String(peer.p2pMessages),
       String(peer.mqttBytes),
+      String(peer.mqttMessages),
       String(peer.p2pBytesPerSec),
       String(peer.mqttBytesPerSec),
       String(peer.pings),
@@ -78,9 +89,17 @@ export class MeshService implements OnModuleInit, OnApplicationShutdown {
     );
     const line = (row: string[]) =>
       row.map((value, index) => String(value).padEnd(widths[index] ?? 0)).join("  ");
+    const issues = snapshot.recentIssues
+      .slice(0, 3)
+      .map(
+        (issue) =>
+          `ISSUE ${issue.level.toUpperCase()} ${issue.name} v${issue.version} (${issue.peerId}): ${issue.message} ${JSON.stringify(issue.context)}`,
+      )
+      .join("\n");
     this.logger.log(
       `broker=${snapshot.brokerConnected ? "connected" : "disconnected"} self=${snapshot.self.name} v${snapshot.self.version} (${snapshot.self.peerId}) peers=${snapshot.totals.peers}\n` +
-        `${line(header)}\n${rows.length ? rows.map(line).join("\n") : "(no peers)"}`,
+        `${line(header)}\n${rows.length ? rows.map(line).join("\n") : "(no peers)"}` +
+        (issues ? `\n${issues}` : ""),
     );
   }
 }

@@ -25,5 +25,10 @@ Aggiornato dal coordinatore. Gli agenti non modificano questo file.
 | D19 | ✅    | PWA installabile/offline, banner offline e versione visibile               | lead                    |
 | D20 | ✅    | Presence ogni 30 s, retain/LWT e versione nei messaggi                     | lead                    |
 | D21 | ✅    | Verifica traffico data nullo quando tutte le coppie sono P2P               | lead                    |
+| D22 | ✅    | Conteggi messaggi P2P/MQTT nella UI e nella console                        | lead                    |
+| D23 | ✅    | Emoji per broker, route e sezione connected                                | lead                    |
+| D24 | ✅    | Diagnostica errori su MQTT issues/{peerId}, UI e log backend               | lead                    |
+| D25 | ✅    | Presence v2 isolata, 30 s reali e pulizia retained leave                   | lead                    |
+| D26 | ✅    | Presence con contatori tx/rx soggettivi P2P/MQTT                           | lead                    |
 
 Legenda: ⏳ queued · 🏃 in corso · 🔍 review/test · ✅ fatto · ❌ bloccato

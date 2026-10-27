@@ -4,6 +4,9 @@ import { MqttConnection } from "@p2plink/mqtt";
 import { PairSession } from "./pair.js";
 import {
   DEMO_PROTOCOL_VERSION,
+  issueTopic,
+  issuesInboxTopic,
+  makeIssue,
   makeLeave,
   makePresence,
   newPeerId,
@@ -11,14 +14,19 @@ import {
   presenceTopic,
   signalInboxTopic,
 } from "./topics.js";
+import { addTraffic, emptyTraffic } from "./rate.js";
 import type {
   HandshakeMessage,
+  IssueLevel,
+  MeshIssue,
   MeshPeer,
   MeshPeerConfig,
   MeshSnapshot,
   PeerKind,
   PeerStats,
   RemotePeer,
+  TrafficDirection,
+  TrafficView,
 } from "./types.js";
 
 const MAX_PING_BYTES = 60_000;
@@ -41,6 +49,9 @@ class MeshImpl implements MeshPeer {
   private readonly peers = new Map<string, RemotePeer>();
   private readonly pairs = new Map<string, PairSession>();
   private readonly listeners = new Set<(snapshot: MeshSnapshot) => void>();
+  private readonly recentIssues: MeshIssue[] = [];
+  private readonly issueIds = new Set<string>();
+  private readonly issueDedupe = new Map<string, number>();
   private started = false;
   private stopped = false;
   private webRtcEnabled: boolean;
@@ -61,7 +72,17 @@ class MeshImpl implements MeshPeer {
       brokerConnected: false,
       webRtcEnabled: this.webRtcEnabled,
       peers: [],
-      totals: { peers: 0, p2pBytes: 0, mqttBytes: 0, p2pBytesPerSec: 0, mqttBytesPerSec: 0 },
+      totals: {
+        peers: 0,
+        p2pBytes: 0,
+        mqttBytes: 0,
+        p2pMessages: 0,
+        mqttMessages: 0,
+        p2pBytesPerSec: 0,
+        mqttBytesPerSec: 0,
+        traffic: emptyTraffic(),
+      },
+      recentIssues: [],
       updatedAt: Date.now(),
     };
   }
@@ -90,9 +111,8 @@ class MeshImpl implements MeshPeer {
       maxPayloadBytes: MAX_FRAME_BYTES,
       will: {
         topic: presenceTopic(this.peerId),
-        payload: JSON.stringify(
-          makeLeave(this.peerId, this.config.name, this.config.kind, this.version),
-        ),
+        // Empty retained payload clears the stale presence on abnormal disconnect.
+        payload: new Uint8Array(0),
         qos: 1,
         retain: true,
       },
@@ -115,10 +135,32 @@ class MeshImpl implements MeshPeer {
         },
         1,
       );
+      await connection
+        .subscribeAsync(
+          issuesInboxTopic(),
+          (topic, payload) => {
+            this.handleIssuePayload(topic, payload);
+          },
+          1,
+        )
+        .catch((error: unknown) => {
+          // A restrictive broker ACL must not prevent the mesh from starting.
+          this.logger.warn("issue subscription unavailable", {
+            error: P2PLinkError.from(error).message,
+          });
+        });
     } catch (error) {
+      const normalized = P2PLinkError.from(error);
       await connection.close().catch(() => undefined);
       this.connection = null;
-      throw P2PLinkError.from(error);
+      this.reportIssue("error", "mesh start failed", {
+        phase: "mqtt-connect",
+        broker: this.safeBroker(),
+        online: typeof navigator === "undefined" ? true : navigator.onLine,
+        secureContext: typeof window === "undefined" ? true : window.isSecureContext,
+        ...(this.config.platform === undefined ? {} : { platform: this.config.platform }),
+      });
+      throw normalized;
     }
     this.started = true;
     this.stopped = false;
@@ -146,6 +188,7 @@ class MeshImpl implements MeshPeer {
       kind: this.config.kind,
       version: this.version,
       pingBytes: this.config.pingBytes,
+      presenceIntervalMs: presenceInterval,
     });
     this.emitSnapshot();
   }
@@ -163,11 +206,13 @@ class MeshImpl implements MeshPeer {
     this.statsTimer = null;
     try {
       if (this.connection?.connected && this.identity) {
+        const topic = presenceTopic(this.peerId);
         await this.connection.publish(
-          presenceTopic(this.peerId),
+          topic,
           JSON.stringify(makeLeave(this.peerId, this.config.name, this.config.kind, this.version)),
           1,
         );
+        await this.connection.publish(topic, new Uint8Array(0), 1, { retain: true });
       }
     } catch {
       // Best effort.
@@ -201,6 +246,163 @@ class MeshImpl implements MeshPeer {
     this.emitSnapshot();
   }
 
+  reportIssue(
+    level: IssueLevel,
+    message: string,
+    context: Record<string, string | number | boolean> = {},
+  ): void {
+    const key = `${level}:${message}:${JSON.stringify(context)}`;
+    const now = Date.now();
+    const previous = this.issueDedupe.get(key);
+    if (previous !== undefined && now - previous < 30_000) return;
+    this.issueDedupe.set(key, now);
+    if (this.issueDedupe.size > 200) {
+      for (const [entryKey, at] of this.issueDedupe) {
+        if (now - at > 60_000) this.issueDedupe.delete(entryKey);
+      }
+    }
+    const issue = makeIssue({
+      id: newPeerId(),
+      peerId: this.peerId,
+      name: this.config.name,
+      kind: this.config.kind,
+      version: this.version,
+      level,
+      message,
+      context: this.sanitizeContext(context),
+    });
+    this.recordIssue(issue);
+    if (this.connection?.state === "open") {
+      void this.connection
+        .publish(issueTopic(this.peerId), JSON.stringify(issue), 1)
+        .catch((error: unknown) => {
+          this.logger.debug("issue publish failed", {
+            error: P2PLinkError.from(error).message,
+          });
+        });
+    } else {
+      void this.publishIssueStandalone(issue);
+    }
+  }
+
+  private safeBroker(): string {
+    try {
+      const parsed = new URL(this.config.url);
+      return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+    } catch {
+      return "invalid-url";
+    }
+  }
+
+  private sanitizeContext(
+    context: Record<string, string | number | boolean>,
+  ): Record<string, string | number | boolean> {
+    const clean: Record<string, string | number | boolean> = {};
+    for (const [key, value] of Object.entries(context).slice(0, 20)) {
+      if (typeof value === "string") clean[key.slice(0, 40)] = value.slice(0, 300);
+      else if (typeof value === "number" && Number.isFinite(value)) clean[key.slice(0, 40)] = value;
+      else if (typeof value === "boolean") clean[key.slice(0, 40)] = value;
+    }
+    return clean;
+  }
+
+  private recordIssue(issue: MeshIssue): void {
+    if (this.issueIds.has(issue.id)) return;
+    this.issueIds.add(issue.id);
+    this.recentIssues.unshift(issue);
+    if (this.recentIssues.length > 30) {
+      const removed = this.recentIssues.pop();
+      if (removed) this.issueIds.delete(removed.id);
+    }
+    this.emitSnapshot();
+  }
+
+  private async publishIssueStandalone(issue: MeshIssue): Promise<void> {
+    let connection: MqttConnection | null = null;
+    try {
+      connection = new MqttConnection({
+        url: this.config.url,
+        clientId: `issue-${this.peerId}-${Date.now()}`,
+        ...(this.config.username === undefined ? {} : { username: this.config.username }),
+        ...(this.config.password === undefined ? {} : { password: this.config.password }),
+        keepaliveSeconds: 15,
+        reconnectPeriodMs: 0,
+        connectTimeoutMs: 5_000,
+        maxPayloadBytes: MAX_FRAME_BYTES,
+        logger: this.logger,
+      });
+      await connection.connect();
+      await connection.publish(issueTopic(this.peerId), JSON.stringify(issue), 1);
+    } catch (error) {
+      this.logger.debug("standalone issue publish failed", {
+        error: P2PLinkError.from(error).message,
+      });
+    } finally {
+      await connection?.close().catch(() => undefined);
+    }
+  }
+
+  private handleIssuePayload(topic: string, payload: Uint8Array): void {
+    const topicPeer = /\/issues\/([^/]+)$/u.exec(topic)?.[1];
+    if (!topicPeer) return;
+    let value: unknown;
+    try {
+      value = JSON.parse(new TextDecoder().decode(payload)) as unknown;
+    } catch {
+      return;
+    }
+    if (typeof value !== "object" || value === null) return;
+    const record = value as Partial<MeshIssue>;
+    if (
+      record.v !== 2 ||
+      record.type !== "issue" ||
+      typeof record.id !== "string" ||
+      record.peerId !== topicPeer ||
+      (record.level !== "warn" && record.level !== "error") ||
+      typeof record.message !== "string" ||
+      typeof record.peerId !== "string" ||
+      typeof record.name !== "string" ||
+      typeof record.version !== "string" ||
+      (record.kind !== "browser" && record.kind !== "nest") ||
+      typeof record.ts !== "number"
+    ) {
+      return;
+    }
+    const issue: MeshIssue = {
+      v: 2,
+      type: "issue",
+      id: record.id.slice(0, 64),
+      peerId: record.peerId.slice(0, 64),
+      name: record.name.slice(0, 64),
+      kind: record.kind,
+      version: record.version.slice(0, 32),
+      level: record.level,
+      message: record.message.slice(0, 300),
+      context:
+        typeof record.context === "object" && record.context !== null
+          ? this.sanitizeContext(record.context as Record<string, string | number | boolean>)
+          : {},
+      ts: record.ts,
+    };
+    if (this.issueIds.has(issue.id)) return;
+    this.logger.warn("remote issue", {
+      peerId: issue.peerId,
+      name: issue.name,
+      level: issue.level,
+      message: issue.message,
+      context: issue.context,
+    });
+    this.recordIssue(issue);
+  }
+
+  private presenceTraffic(): TrafficView {
+    const traffic = emptyTraffic();
+    for (const pair of this.pairs.values()) {
+      if (!pair.isClosed) addTraffic(traffic, pair.traffic());
+    }
+    return traffic;
+  }
+
   private async publishPresence(): Promise<void> {
     if (!this.connection || !this.identity || this.stopped) return;
     if (this.connection.state !== "open") return;
@@ -215,6 +417,7 @@ class MeshImpl implements MeshPeer {
             version: this.version,
             identityId: this.identity.identityId,
             identityPublicKey: this.identity.publicKeyJwk,
+            traffic: this.presenceTraffic(),
           }),
         ),
         1,
@@ -229,6 +432,10 @@ class MeshImpl implements MeshPeer {
 
   private handlePresencePayload(topic: string, payload: Uint8Array): void {
     const topicPeer = /\/presence\/([^/]+)$/u.exec(topic)?.[1];
+    if (payload.length === 0) {
+      if (topicPeer) this.removePeer(topicPeer);
+      return;
+    }
     let value: unknown;
     try {
       value = JSON.parse(new TextDecoder().decode(payload)) as unknown;
@@ -255,6 +462,13 @@ class MeshImpl implements MeshPeer {
     }
     if (record.type === "leave") {
       this.removePeer(record.peerId);
+      // Clear retained leave messages left by older clients. This also makes
+      // a reconnecting peer disappear immediately from the retained snapshot.
+      if (this.connection?.state === "open") {
+        void this.connection
+          .publish(presenceTopic(record.peerId), new Uint8Array(0), 1, { retain: true })
+          .catch(() => undefined);
+      }
       return;
     }
     if (
@@ -271,6 +485,8 @@ class MeshImpl implements MeshPeer {
     } catch {
       return;
     }
+    const traffic = this.parseTraffic(record.traffic);
+    if (!traffic) return;
     const peer: RemotePeer = {
       peerId: record.peerId,
       name: record.name.slice(0, 64),
@@ -279,13 +495,20 @@ class MeshImpl implements MeshPeer {
       identityId: record.identityId,
       identityPublicKey: record.identityPublicKey as JsonWebKey,
       lastSeen: Date.now(),
+      traffic,
     };
     const existing = this.peers.get(peer.peerId);
     if (existing) {
       void this.identityChanged(existing, peer).then((changed) => {
-        if (changed) this.removePeer(peer.peerId);
-        this.peers.set(peer.peerId, peer);
-        this.ensurePair(peer);
+        if (changed) {
+          this.removePeer(peer.peerId);
+          this.peers.set(peer.peerId, peer);
+          this.ensurePair(peer);
+        } else {
+          // Keep the same object: PairSession holds a reference to it.
+          Object.assign(existing, peer);
+          this.ensurePair(existing);
+        }
         this.emitSnapshot();
       });
       return;
@@ -293,6 +516,36 @@ class MeshImpl implements MeshPeer {
     this.peers.set(peer.peerId, peer);
     this.ensurePair(peer);
     this.emitSnapshot();
+  }
+
+  private parseTraffic(value: unknown): TrafficView | null {
+    if (typeof value !== "object" || value === null) return null;
+    const input = value as Record<string, unknown>;
+    const readCount = (count: unknown): { messages: number; bytes: number } | null => {
+      if (typeof count !== "object" || count === null) return null;
+      const item = count as Record<string, unknown>;
+      if (
+        typeof item.messages !== "number" ||
+        !Number.isFinite(item.messages) ||
+        item.messages < 0 ||
+        typeof item.bytes !== "number" ||
+        !Number.isFinite(item.bytes) ||
+        item.bytes < 0
+      ) {
+        return null;
+      }
+      return { messages: Math.floor(item.messages), bytes: Math.floor(item.bytes) };
+    };
+    const readDirection = (direction: unknown): TrafficDirection | null => {
+      if (typeof direction !== "object" || direction === null) return null;
+      const item = direction as Record<string, unknown>;
+      const p2p = readCount(item.p2p);
+      const mqtt = readCount(item.mqtt);
+      return p2p && mqtt ? { p2p, mqtt } : null;
+    };
+    const tx = readDirection(input.tx);
+    const rx = readDirection(input.rx);
+    return tx && rx ? { tx, rx } : null;
   }
 
   private async identityChanged(existing: RemotePeer, next: RemotePeer): Promise<boolean> {
@@ -334,6 +587,7 @@ class MeshImpl implements MeshPeer {
       logger: this.logger,
       webRtcEnabled: () => this.webRtcEnabled,
       onChange: () => this.emitSnapshot(),
+      reportIssue: (level, message, context) => this.reportIssue(level, message, context),
     });
     this.pairs.set(peer.peerId, pair);
     return pair;
@@ -426,8 +680,12 @@ class MeshImpl implements MeshPeer {
           rttMs: null,
           p2pBytes: 0,
           mqttBytes: 0,
+          p2pMessages: 0,
+          mqttMessages: 0,
           p2pBytesPerSec: 0,
           mqttBytesPerSec: 0,
+          traffic: emptyTraffic(),
+          remoteTraffic: peer.traffic,
           pings: 0,
           roundTrips: 0,
           lastPingAt: null,
@@ -440,11 +698,23 @@ class MeshImpl implements MeshPeer {
       (acc, peer) => {
         acc.p2pBytes += peer.p2pBytes;
         acc.mqttBytes += peer.mqttBytes;
+        acc.p2pMessages += peer.p2pMessages;
+        acc.mqttMessages += peer.mqttMessages;
         acc.p2pBytesPerSec += peer.p2pBytesPerSec;
         acc.mqttBytesPerSec += peer.mqttBytesPerSec;
+        addTraffic(acc.traffic, peer.traffic);
         return acc;
       },
-      { peers: peers.length, p2pBytes: 0, mqttBytes: 0, p2pBytesPerSec: 0, mqttBytesPerSec: 0 },
+      {
+        peers: peers.length,
+        p2pBytes: 0,
+        mqttBytes: 0,
+        p2pMessages: 0,
+        mqttMessages: 0,
+        p2pBytesPerSec: 0,
+        mqttBytesPerSec: 0,
+        traffic: emptyTraffic(),
+      },
     );
     this.lastSnapshot = {
       self: {
@@ -457,6 +727,7 @@ class MeshImpl implements MeshPeer {
       webRtcEnabled: this.webRtcEnabled,
       peers,
       totals,
+      recentIssues: this.recentIssues.slice(0, 30),
       updatedAt: now,
     };
     for (const listener of this.listeners) {

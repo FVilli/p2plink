@@ -19,22 +19,27 @@ Ogni peer:
 - riceve indietro gli stessi byte;
 - verifica lunghezza e SHA-256 ad ogni round-trip;
 - attribuisce i byte al trasporto **effettivamente** usato (P2P o MQTT);
-- mostra byte e rate per peer.
+- mostra byte, numero di messaggi e rate per peer;
+- separa i contatori per direzione (`tx`/`rx`) e per trasporto.
 
 Nessun server di signaling, discovery o coordinamento: solo MQTT.
 
 ### Topic
 
 ```text
-p2plink-demo/v1/presence/{peerId}
-p2plink-demo/v1/signal/{to}/{from}
-p2plink-demo/v1/data/{to}/{from}
+p2plink-demo/v2/presence/{peerId}
+p2plink-demo/v2/signal/{to}/{from}
+p2plink-demo/v2/data/{to}/{from}
+p2plink-demo/v2/issues/{peerId}
 ```
 
 - `presence` è per-peer: ogni peer pubblica solo il proprio stato e tutti si sottoscrivono a `presence/+`. Il `peerId` nel topic deve coincidere con quello nel payload.
 - `signal` contiene `to` e `from`: trasporta handshake, offer/answer/ICE cifrati con chiavi di signaling dedicate.
 - `data` trasporta **solo** i frame applicativi che non sono passati su P2P (fallback MQTT). Quando tutte le coppie sono P2P non viene pubblicato nulla su `data`.
-- `presence` viene pubblicata ogni 30 secondi per peer, con retain per permettere a un nuovo peer di scoprire subito la rete; Last Will pulisce la presence in caso di disconnessione anomala.
+- `presence` viene pubblicata ogni 30 secondi per peer, con retain per permettere a un nuovo peer di scoprire subito la rete; Last Will pulisce la presence in caso di disconnessione anomala. Include i contatori **soggettivi** del peer: messaggi/byte trasmessi e ricevuti, separati per P2P e MQTT.
+- `issues` trasporta problemi e diagnostica (`error`/`warn`) con peer, versione, user-agent/platform e contesto; non contiene password. I client si sottoscrivono a `issues/+` e li mostrano nella UI e nei log del backend.
+
+Il namespace è passato a `v2` per isolare le vecchie schede che pubblicavano presence ogni 2 secondi.
 
 ## PWA e offline
 
@@ -147,16 +152,17 @@ La password viene gestita dall'onboarding, non da una variabile di build.
 
 ### Backend NestJS
 
-| Variabile        | Default                        | Descrizione                                            |
-| ---------------- | ------------------------------ | ------------------------------------------------------ |
-| `MQTT_URL`       | `mqtts://mqtt.fvsg.it:8883`    | URL broker                                             |
-| `MQTT_USERNAME`  | `main:rmq-usr`                 | username broker                                        |
-| `MQTT_PASSWORD`  | —                              | password broker, obbligatoria                          |
-| `PING_BYTES`     | `2048`                         | dimensione random payload ping                         |
-| `STUN_URLS`      | `stun:stun.l.google.com:19302` | STUN demo, separati da virgola; vuoto per disabilitare |
-| `PEER_NAME`      | `nest-<id>`                    | nome visualizzato                                      |
-| `PORT`           | `3100`                         | porta HTTP health/stats                                |
-| `WEBRTC_ENABLED` | `true`                         | `false` forza il solo MQTT                             |
+| Variabile              | Default                        | Descrizione                                            |
+| ---------------------- | ------------------------------ | ------------------------------------------------------ |
+| `MQTT_URL`             | `mqtts://mqtt.fvsg.it:8883`    | URL broker                                             |
+| `MQTT_USERNAME`        | `main:rmq-usr`                 | username broker                                        |
+| `MQTT_PASSWORD`        | —                              | password broker, obbligatoria                          |
+| `PING_BYTES`           | `2048`                         | dimensione random payload ping                         |
+| `PRESENCE_INTERVAL_MS` | `30000`                        | intervallo presence; minimo 1000 ms                    |
+| `STUN_URLS`            | `stun:stun.l.google.com:19302` | STUN demo, separati da virgola; vuoto per disabilitare |
+| `PEER_NAME`            | `nest-<id>`                    | nome visualizzato                                      |
+| `PORT`                 | `3100`                         | porta HTTP health/stats                                |
+| `WEBRTC_ENABLED`       | `true`                         | `false` forza il solo MQTT                             |
 
 Le app non hanno un URL di server applicativo: conoscono solo broker e credenziali.
 
@@ -165,11 +171,27 @@ Le app non hanno un URL di server applicativo: conoscono solo broker e credenzia
 - **route**: trasporto attivo corrente (`p2p`, `mqtt`, `connecting`); i byte sono attribuiti al trasporto effettivo del singolo ping, non dedotti dalla route;
 - **rtt**: latenza dell'ultimo ping riuscito;
 - **p2p bytes / mqtt bytes**: byte del payload dei ping scambiati su ciascun trasporto, in entrambe le direzioni;
+- **p2p msgs / mqtt msgs**: numero di messaggi applicativi scambiati su ciascun trasporto; il tooltip mostra `tx`/`rx` locali e i contatori riportati dal peer nella presence;
 - **p2p B/s / mqtt B/s**: rate su finestra mobile di 2 secondi;
 - **pings / OK**: ping inviati e round-trip completati con hash valido;
-- **Version**: versione dichiarata dal peer nella presence.
+- **Version**: versione dichiarata dal peer nella presence;
+- **route/status**: emoji `🟢 p2p`, `🟡 mqtt`, `⏳ connecting`, `🟢/🔴 Broker` per rendere immediata la lettura della sezione connected.
 
-I byte delle richieste e delle risposte sono contati sul peer che li invia e sul peer che li riceve. I heartbeat interni di P2PLink non sono conteggiati.
+I byte e i messaggi delle richieste e delle risposte sono contati sul peer che li invia e sul peer che li riceve. I heartbeat interni di P2PLink non sono conteggiati.
+
+## Diagnostica problemi via MQTT
+
+Ogni peer pubblica problemi applicativi su `p2plink-demo/v2/issues/{peerId}` (QoS 1, non retain). Per seguirli:
+
+```bash
+mosquitto_sub -h mqtt.fvsg.it -p 8883 --cafile ... \
+  -u 'main:rmq-usr' -P "$MQTT_PASSWORD" \
+  -t 'p2plink-demo/v2/issues/+' -v
+```
+
+La UI mostra gli ultimi problemi ricevuti e il backend NestJS li stampa nei log. Il contesto include user-agent, piattaforma, stato online/secure-context e fase dell'errore, per diagnosticare client Android.
+
+Se il client non riesce proprio a connettersi al broker, l'issue viene tentata su una connessione diagnostica separata; se anche questa fallisce non c'è un canale MQTT disponibile e resta l'errore mostrato nella UI.
 
 ## Integrità e routing
 
