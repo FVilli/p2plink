@@ -18,8 +18,25 @@
         <strong>Self peer</strong><span id="self-peer">Starting…</span>
       </section>
       <section class="controls">
-        <label><input id="toggle-p2p" type="checkbox" checked /> P2P abilitato</label
-        ><button id="reset-stats" type="button">Reset stats</button>
+        <label><input id="toggle-p2p" type="checkbox" checked disabled /> P2P abilitato</label
+        ><button id="reset-stats" type="button">Reset stats</button
+        ><button id="edit-config" type="button" disabled>Impostazioni</button>
+      </section>
+      <section id="config-panel" class="config" hidden>
+        <form id="config-form">
+          <h2>Prima connessione</h2>
+          <p class="muted">I dati vengono salvati solo nel localStorage di questo browser.</p>
+          <label for="broker-url">Broker WebSocket URL</label>
+          <input id="broker-url" type="url" required placeholder="wss://mqtt-ws.fvsg.it:443/ws" />
+          <label for="broker-username">Username</label>
+          <input id="broker-username" type="text" required placeholder="main:rmq-usr" />
+          <label for="broker-password">Password</label>
+          <input id="broker-password" type="password" autocomplete="current-password" required />
+          <label for="client-name">Client name</label>
+          <input id="client-name" type="text" required maxlength="64" />
+          <p id="config-error" class="config-error"></p>
+          <button type="submit">Connetti</button>
+        </form>
       </section>
       <div id="error" role="alert" hidden></div>
       <section class="totals" id="totals"></section>
@@ -36,6 +53,7 @@
               <th>P2P B/s</th>
               <th>MQTT B/s</th>
               <th>Pings</th>
+              <th>OK</th>
               <th>Last error</th>
             </tr>
           </thead>

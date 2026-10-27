@@ -1,4 +1,4 @@
-import type { Logger, Unsubscribe } from "@p2plink/core";
+import type { IceServer, Logger, Unsubscribe } from "@p2plink/core";
 import type { WebRtcEngine } from "@p2plink/webrtc";
 
 export type PeerKind = "browser" | "nest";
@@ -18,6 +18,7 @@ export interface MeshPeerConfig {
   pingBytes: number;
   /** Provided by the host: browser or Node engine. */
   engine: WebRtcEngine;
+  iceServers?: IceServer[];
   pingIntervalMs?: number;
   pingTimeoutMs?: number;
   presenceIntervalMs?: number;

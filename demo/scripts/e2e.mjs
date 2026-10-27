@@ -88,6 +88,7 @@ start(process.execPath, [backendEntry], {
     PEER_NAME: "e2e-nest-a",
     PORT: "3100",
     PING_BYTES: "2048",
+    STUN_URLS: "",
     WEBRTC_ENABLED: "true",
   },
 });
@@ -100,6 +101,7 @@ start(process.execPath, [backendEntry], {
     PEER_NAME: "e2e-nest-b",
     PORT: "3101",
     PING_BYTES: "2048",
+    STUN_URLS: "",
     WEBRTC_ENABLED: "true",
   },
 });
@@ -158,8 +160,19 @@ try {
     headless: true,
     args: ["--no-sandbox", "--disable-dev-shm-usage"],
   });
+  const localConfig = {
+    url: "ws://127.0.0.1:9002",
+    username: "demo",
+    password: "demo-pass",
+    iceServers: [],
+  };
   const contextA = await browser.newContext();
   const contextB = await browser.newContext();
+  const installConfig = (config) => {
+    window.__P2PLINK_DEMO_CONFIG__ = config;
+  };
+  await contextA.addInitScript(installConfig, localConfig);
+  await contextB.addInitScript(installConfig, localConfig);
   const pageA = await contextA.newPage();
   const pageB = await contextB.newPage();
   const errors = [];
@@ -303,6 +316,39 @@ try {
     { timeout: 40_000 },
   );
   console.log("7. P2P restored and ping bytes continue on DataChannel");
+
+  const contextC = await browser.newContext();
+  const pageC = await contextC.newPage();
+  await pageC.goto("http://127.0.0.1:5174/");
+  await pageC.locator("#config-panel:not([hidden])").waitFor({ timeout: 10_000 });
+  const defaults = await pageC.evaluate(() => ({
+    url: document.querySelector("#broker-url")?.value,
+    username: document.querySelector("#broker-username")?.value,
+    name: document.querySelector("#client-name")?.value,
+  }));
+  if (
+    !defaults.url?.startsWith("wss://") ||
+    defaults.username !== "main:rmq-usr" ||
+    !defaults.name
+  ) {
+    throw new Error(`unexpected onboarding defaults: ${JSON.stringify(defaults)}`);
+  }
+  await pageC.fill("#broker-url", "ws://127.0.0.1:9002");
+  await pageC.fill("#broker-username", "demo");
+  await pageC.fill("#broker-password", "demo-pass");
+  await pageC.fill("#client-name", "e2e-onboard");
+  await pageC.click("#config-form button[type=submit]");
+  await pageC.waitForFunction(
+    () => document.querySelector("#broker-state")?.getAttribute("data-connected") === "true",
+    null,
+    { timeout: 20_000 },
+  );
+  const stored = await pageC.evaluate(() => localStorage.getItem("p2plink-demo-config"));
+  if (!stored || !stored.includes("e2e-onboard") || !stored.includes("ws://127.0.0.1:9002")) {
+    throw new Error(`onboarding config not stored: ${stored}`);
+  }
+  await contextC.close();
+  console.log("8. onboarding form saved url/username/password/client name in localStorage");
 
   const content = await pageA.locator("body").innerText();
   if (/hash mismatch|integrity/i.test(content))

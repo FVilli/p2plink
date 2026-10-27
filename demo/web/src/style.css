@@ -101,3 +101,58 @@ th {
   background: #351e26;
   border-radius: 6px;
 }
+.password {
+  margin: 16px 0;
+  padding: 16px;
+  background: #1a2230;
+  border: 1px solid #426de0;
+  border-radius: 8px;
+}
+.password form {
+  display: grid;
+  gap: 10px;
+  max-width: 520px;
+}
+.password-row {
+  display: flex;
+  gap: 10px;
+}
+.password input {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 5px;
+  border: 1px solid #3d4d66;
+  background: #0f1622;
+  color: #e8edf5;
+}
+.password-error {
+  color: #ff9c9c;
+  margin: 0;
+  min-height: 1.2em;
+}
+.config h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.config .muted {
+  color: #9aa8ba;
+  font-size: 0.9rem;
+  margin: 0 0 4px;
+}
+.config form {
+  display: grid;
+  gap: 8px;
+  max-width: 600px;
+}
+.config input {
+  padding: 9px 12px;
+  border-radius: 5px;
+  border: 1px solid #3d4d66;
+  background: #0f1622;
+  color: #e8edf5;
+}
+.config-error {
+  color: #ff9c9c;
+  margin: 0;
+  min-height: 1.2em;
+}

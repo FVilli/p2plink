@@ -44,6 +44,7 @@ export interface PairContext {
   connection: MqttConnection;
   identity: IdentityKeyPair;
   engine: WebRtcEngine;
+  iceServers?: import("@p2plink/core").IceServer[];
   pingBytes: number;
   pingTimeoutMs: number;
   logger: Logger;
@@ -493,7 +494,7 @@ export class PairSession {
       role: this.role === "initiator" ? "offerer" : "answerer",
       negotiationId: this.sessionId,
       epoch: 0,
-      iceServers: [],
+      iceServers: this.ctx.iceServers ?? [],
       maxFrameBytes: MAX_FRAME_BYTES,
       logger: this.ctx.logger,
       sendSignal: async (signal) => {

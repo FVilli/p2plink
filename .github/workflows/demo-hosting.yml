@@ -1,0 +1,38 @@
+name: Demo hosting (Firebase)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Require Firebase token
+        run: |
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "Configure the FIREBASE_TOKEN repository secret (firebase login:ci)." >&2
+            exit 1
+          fi
+      - name: Build library and demo
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          pnpm --dir demo install --frozen-lockfile
+          pnpm --dir demo build
+      - name: Deploy hosting
+        run: npx --yes firebase-tools@latest deploy --only hosting --project p2plink-demo --token "$FIREBASE_TOKEN"
+        working-directory: demo

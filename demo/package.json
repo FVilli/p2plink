@@ -9,7 +9,9 @@
     "build": "pnpm --filter @p2plink/demo-mesh build && pnpm --filter @p2plink/demo-backend build && pnpm --filter @p2plink/demo-web build",
     "dev:web": "pnpm --filter @p2plink/demo-web dev",
     "dev:backend": "pnpm --filter @p2plink/demo-backend start",
-    "e2e": "node scripts/e2e.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "deploy:web": "pnpm --filter @p2plink/demo-web build && npx --yes firebase-tools@latest deploy --only hosting --project p2plink-demo",
+    "image:build": "docker build -f backend/Dockerfile -t p2plink-demo .."
   },
   "pnpm": {
     "onlyBuiltDependencies": [

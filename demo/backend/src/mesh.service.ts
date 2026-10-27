@@ -7,12 +7,18 @@ import { createNodeWebRtcEngine } from "@p2plink/webrtc/node";
 export class MeshService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(MeshService.name);
   private readonly peer = createMeshPeer({
-    url: process.env.MQTT_URL ?? "mqtt://127.0.0.1:1884",
-    ...(process.env.MQTT_USERNAME ? { username: process.env.MQTT_USERNAME } : {}),
-    ...(process.env.MQTT_PASSWORD ? { password: process.env.MQTT_PASSWORD } : {}),
+    url: process.env.MQTT_URL ?? "mqtts://mqtt.fvsg.it:8883",
+    username: process.env.MQTT_USERNAME ?? "main:rmq-usr",
+    password: process.env.MQTT_PASSWORD ?? "",
     name: process.env.PEER_NAME ?? `nest-${crypto.randomUUID().slice(0, 6)}`,
     kind: "nest",
     pingBytes: Number(process.env.PING_BYTES ?? 2048),
+    iceServers:
+      process.env.STUN_URLS === ""
+        ? []
+        : (process.env.STUN_URLS ?? "stun:stun.l.google.com:19302")
+            .split(",")
+            .map((url) => ({ urls: url.trim() })),
     engine: createNodeWebRtcEngine(),
     disableWebRtc: process.env.WEBRTC_ENABLED === "false",
   });

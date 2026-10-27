@@ -370,12 +370,15 @@ La demo dedicata in [demo/](demo/README.md) mostra frontend e backend NestJS com
 
 ```bash
 pnpm demo:build
-pnpm --dir demo broker:up
 pnpm --dir demo dev:web
+# onboarding: wss://mqtt-ws.fvsg.it:443/ws, username main:rmq-usr, password, client name
+
 # in altri terminali, uno o più backend:
-MQTT_URL=mqtt://127.0.0.1:1884 MQTT_USERNAME=demo MQTT_PASSWORD=demo-pass \
-PEER_NAME=nest-1 PORT=3100 PING_BYTES=2048 pnpm --dir demo dev:backend
+MQTT_PASSWORD='<password>' PEER_NAME=nest-1 PORT=3100 PING_BYTES=2048 \
+pnpm --dir demo dev:backend
 ```
+
+Per test/E2E offline è disponibile anche `pnpm --dir demo broker:up` (1884/9002, utente demo/demo-pass), con override di URL e credenziali. Dettagli e deploy Firebase/GHCR: [demo/README.md](demo/README.md).
 
 ### Angular ↔ NestJS
 

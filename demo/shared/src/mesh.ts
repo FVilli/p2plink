@@ -297,6 +297,7 @@ class MeshImpl implements MeshPeer {
       connection: this.connection,
       identity: this.identity,
       engine: this.config.engine,
+      iceServers: this.config.iceServers ?? [],
       pingBytes: this.config.pingBytes,
       pingTimeoutMs: this.config.pingTimeoutMs ?? 4_000,
       logger: this.logger,
