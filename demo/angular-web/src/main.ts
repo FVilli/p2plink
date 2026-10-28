@@ -11,12 +11,14 @@ import {
   RegistryApi,
   ensureRegistryPeer,
   type RegistryTokens,
+  toFriendlyPeerName,
 } from "@p2plink/demo-mesh";
 import { createBrowserWebRtcEngine } from "@p2plink/webrtc";
 
-const VERSION = "0.2.1",
+const VERSION = "0.2.2",
   KEY = "p2plink-demo-config",
   TOKENS_KEY = "p2plink-registry-tokens",
+  FRIENDLY_KEY = "p2plink-friendly-name",
   REGISTRY_URL = "https://p2plink-registry.fvsg.mqu.it",
   DEFAULT_URL = "wss://mqtt-ws.fvsg.it:443/ws",
   DEFAULT_USERNAME = "main:rmq-usr";
@@ -64,24 +66,17 @@ class BytesRatePipe implements PipeTransform {
           </h1>
           <p>Browser peer network</p>
         </div>
-        <span id="broker-state" [attr.data-connected]="connected()">{{
-          connected() ? "🟢 MQTT" : online() ? "🔴 MQTT" : "⚪ MQTT"
-        }}</span>
+        <span id="broker-state" [attr.data-connected]="connected()">
+          <span id="broker-dot">{{ connected() ? "🟢" : online() ? "🔴" : "⚪" }}</span>
+          <strong>MQTT</strong>
+          <small id="broker-url">{{ brokerUrl() || "—" }}</small>
+        </span>
       </header>
       <section class="self">
         <div class="self-identity">
           <strong>Self peer</strong><span id="self-peer">{{ identity() }}</span>
         </div>
         <div class="self-actions">
-          <button
-            id="edit-config"
-            class="icon-button"
-            aria-label="Impostazioni"
-            title="Impostazioni"
-            (click)="openSettings()"
-          >
-            ⚙️
-          </button>
           <button
             id="logout"
             class="icon-button"
@@ -108,6 +103,14 @@ class BytesRatePipe implements PipeTransform {
           <h2>{{ authMode() }}</h2>
           <p class="muted">P2PLink Registry account</p>
           <label>Email</label><input name="email" type="email" required [value]="authEmail()" />
+          <label>Client name</label
+          ><input
+            name="friendly"
+            type="text"
+            maxlength="50"
+            placeholder="monster"
+            [value]="friendly()"
+          />
           @if (authMode() === "Login" || authMode() === "Register") {
             <label>Password (min 12 characters)</label
             ><input name="password" type="password" minlength="12" required />
@@ -134,29 +137,6 @@ class BytesRatePipe implements PipeTransform {
         @if (authMode() !== "Login") {
           <button type="button" (click)="setAuthMode('Login')">Back to login</button>
         }
-      </section>
-      <section id="config-panel" class="config" [hidden]="!editing() || authVisible()">
-        <form id="config-form" (submit)="submit($event)">
-          <h2>Prima connessione</h2>
-          <p class="muted">I dati vengono salvati solo nel localStorage di questo browser.</p>
-          <label for="broker-url">Broker WebSocket URL</label
-          ><input id="broker-url" name="url" type="url" required [value]="config.url" /><label
-            for="broker-username"
-            >Username</label
-          ><input id="broker-username" name="username" required [value]="config.username" /><label
-            for="broker-password"
-            >Password</label
-          ><input
-            id="broker-password"
-            name="password"
-            type="password"
-            required
-            [value]="config.password"
-          /><label for="client-name">Client name</label
-          ><input id="client-name" name="name" required maxlength="64" [value]="config.name" />
-          <p id="config-error" class="config-error">{{ error() }}</p>
-          <button>Connetti</button>
-        </form>
       </section>
       <div id="error" [hidden]="!error()">{{ error() }}</div>
       <section id="totals" class="totals">
@@ -281,12 +261,16 @@ class App {
   snapshot = signal<MeshSnapshot | null>(null);
   connected = signal(false);
   online = signal(navigator.onLine);
-  editing = signal(true);
   authVisible = signal(true);
+  brokerUrl = signal("");
   authMode = signal("Login");
   authError = signal("");
   authEmail = signal("");
   authToken = signal("");
+  friendly = signal("");
+  friendlyName() {
+    return toFriendlyPeerName(this.friendly() || this.config.name || "browser");
+  }
   registrySession = signal(false);
   error = signal("");
   identity = signal("Starting…");
@@ -311,6 +295,7 @@ class App {
     const registryOverride =
       typeof rt?.registryUrl === "string" ? rt.registryUrl : appEnv?.VITE_REGISTRY_URL;
     this.registryUrl = registryOverride || REGISTRY_URL;
+    this.friendly.set(localStorage.getItem(FRIENDLY_KEY) ?? "");
     const auth = new URLSearchParams(location.search).get("auth");
     if (auth === "verify-email" || auth === "reset-password") {
       this.authMode.set(auth === "verify-email" ? "Verify email" : "Reset password");
@@ -324,7 +309,6 @@ class App {
       if (stored) {
         this.authVisible.set(false);
         this.config = { ...this.config, ...JSON.parse(stored) };
-        this.editing.set(false);
         if (this.config.url && this.config.username && this.config.password)
           this.start(this.config);
       }
@@ -339,7 +323,6 @@ class App {
       typeof rt?.password === "string"
     ) {
       this.authVisible.set(false);
-      this.editing.set(false);
       this.start(this.config);
     }
     window.addEventListener("online", () => {
@@ -378,8 +361,11 @@ class App {
     const d = new FormData(e.target as HTMLFormElement),
       email = String(d.get("email")),
       password = String(d.get("password") ?? ""),
-      token = String(d.get("token") ?? "");
+      token = String(d.get("token") ?? ""),
+      friendly = String(d.get("friendly") ?? "").trim();
     this.authEmail.set(email);
+    this.friendly.set(friendly || this.friendly());
+    localStorage.setItem(FRIENDLY_KEY, this.friendly());
     this.authError.set("");
     const api = new RegistryApi(this.registryUrl);
     try {
@@ -426,7 +412,7 @@ class App {
           api,
           accessToken: tokens.accessToken,
           storage: localStorage,
-          name: this.config.name,
+          name: this.friendlyName(),
         });
       this.registrySession.set(true);
       this.authVisible.set(false);
@@ -443,43 +429,10 @@ class App {
       this.authVisible.set(true);
     }
   }
-  async logout() {
-    const peerId = this.identity().match(/\\(([^)]+)\\)/)?.[1];
-    try {
-      const raw = localStorage.getItem(TOKENS_KEY);
-      if (raw)
-        await new RegistryApi(this.registryUrl).logout(
-          (JSON.parse(raw) as RegistryTokens).refreshToken,
-          peerId,
-        );
-    } catch {
-      /* local logout proceeds */
-    }
-    localStorage.clear();
-    this.peer?.stop();
-    this.peer = null;
-    this.snapshot.set(null);
-    this.connected.set(false);
-    this.registrySession.set(false);
-    this.authVisible.set(true);
-    this.identity.set("Not connected");
-  }
-  submit(e: Event) {
-    e.preventDefault();
-    const d = new FormData(e.target as HTMLFormElement);
-    this.config = {
-      url: String(d.get("url")),
-      username: String(d.get("username")),
-      password: String(d.get("password")),
-      name: String(d.get("name")),
-    };
-    localStorage.setItem(KEY, JSON.stringify(this.config));
-    this.start(this.config);
-  }
   start(c: Config) {
     if (!navigator.onLine) return;
     this.peer?.stop();
-    this.editing.set(false);
+    this.brokerUrl.set(c.url);
     const p = createMeshPeer({
       url: c.url,
       username: c.username,
@@ -513,14 +466,27 @@ class App {
       });
     });
   }
-  openSettings() {
+  async logout() {
+    const peerId = this.identity().match(/\\(([^)]+)\\)/)?.[1];
+    try {
+      const raw = localStorage.getItem(TOKENS_KEY);
+      if (raw)
+        await new RegistryApi(this.registryUrl).logout(
+          (JSON.parse(raw) as RegistryTokens).refreshToken,
+          peerId,
+        );
+    } catch {
+      /* local logout proceeds */
+    }
+    localStorage.clear();
     this.peer?.stop();
     this.peer = null;
     this.snapshot.set(null);
     this.connected.set(false);
+    this.registrySession.set(false);
+    this.authVisible.set(true);
     this.identity.set("Not connected");
-    this.editing.set(true);
-    this.authVisible.set(!this.registrySession());
+    this.friendly.set("");
   }
   reset() {
     if (confirm("Azzerare i contatori e le statistiche di tutti i peer?")) this.peer?.resetStats();

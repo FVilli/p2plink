@@ -6,7 +6,12 @@ import {
   type PeerStats,
 } from "@p2plink/demo-mesh";
 import { formatByteSize } from "@p2plink/core";
-import { DEFAULT_REGISTRY_URL, RegistryApi, ensureRegistryPeer } from "@p2plink/demo-mesh";
+import {
+  DEFAULT_REGISTRY_URL,
+  RegistryApi,
+  ensureRegistryPeer,
+  toFriendlyPeerName,
+} from "@p2plink/demo-mesh";
 import { createBrowserWebRtcEngine } from "@p2plink/webrtc";
 import { registerSW } from "virtual:pwa-register";
 import "./style.css";
@@ -14,14 +19,13 @@ import "./style.css";
 const APP_VERSION = __APP_VERSION__;
 const CONFIG_KEY = "p2plink-demo-config";
 const TOKENS_KEY = "p2plink-registry-tokens";
+const FRIENDLY_KEY = "p2plink-friendly-name";
 const api = new RegistryApi(
   ((window as { __P2PLINK_DEMO_CONFIG__?: Record<string, unknown> }).__P2PLINK_DEMO_CONFIG__
     ?.registryUrl as string) ??
     import.meta.env.VITE_REGISTRY_URL ??
     DEFAULT_REGISTRY_URL,
 );
-const DEFAULT_URL = "wss://mqtt-ws.fvsg.it:443/ws";
-const DEFAULT_USERNAME = "main:rmq-usr";
 
 interface DemoConfig {
   url: string;
@@ -38,14 +42,8 @@ const self = byId<HTMLSpanElement>("self-peer");
 const body = document.querySelector<HTMLTableSectionElement>("#peers tbody")!;
 const errorBox = byId<HTMLDivElement>("error");
 const totals = byId<HTMLDivElement>("totals");
-const configPanel = byId<HTMLElement>("config-panel");
-const configForm = byId<HTMLFormElement>("config-form");
-const urlInput = byId<HTMLInputElement>("broker-url");
-const usernameInput = byId<HTMLInputElement>("broker-username");
-const passwordInput = byId<HTMLInputElement>("broker-password");
-const nameInput = byId<HTMLInputElement>("client-name");
-const configError = byId<HTMLParagraphElement>("config-error");
-const editConfigButton = byId<HTMLButtonElement>("edit-config");
+const brokerDot = byId<HTMLSpanElement>("broker-dot");
+const brokerUrlText = byId<HTMLSpanElement>("broker-url");
 const resetButton = byId<HTMLButtonElement>("reset-stats");
 const offlineBanner = byId<HTMLDivElement>("offline-banner");
 const appVersion = byId<HTMLSpanElement>("app-version");
@@ -77,6 +75,7 @@ const authForm = byId<HTMLFormElement>("auth-form");
 const authEmail = byId<HTMLInputElement>("auth-email");
 const authPassword = byId<HTMLInputElement>("auth-password");
 const authError = byId<HTMLParagraphElement>("auth-error");
+const authFriendly = byId<HTMLInputElement>("auth-friendly");
 let authMode: "login" | "register" | "forgot" | "reset" | "verify" = "login";
 let authToken: string | null = null;
 const storedTokens = (): { accessToken: string; refreshToken: string } | null => {
@@ -91,7 +90,6 @@ const authTokenInput = byId<HTMLInputElement>("auth-token");
 const authNewPassword = byId<HTMLInputElement>("auth-new-password");
 const authSubmit = byId<HTMLButtonElement>("auth-submit");
 function showAuth(message = ""): void {
-  configPanel.hidden = true;
   authPanel.hidden = false;
   authError.textContent = message;
   const needsToken = authMode === "reset" || authMode === "verify";
@@ -128,7 +126,8 @@ function showAuth(message = ""): void {
   authNewPassword.required = needsNewPassword;
   authNewPassword.minLength = 12;
 }
-let currentConfig: DemoConfig | null = null;
+authFriendly.value = localStorage.getItem(FRIENDLY_KEY) ?? defaultName;
+const friendlyName = () => toFriendlyPeerName(authFriendly.value || defaultName);
 let lastConfig: DemoConfig | null = null;
 
 // Test/debug hook: the visible P2P toggle was removed from the UI.
@@ -260,7 +259,7 @@ function renderTotals(snapshot: MeshSnapshot): void {
 
 function render(snapshot: MeshSnapshot): void {
   broker.dataset.connected = String(snapshot.brokerConnected);
-  broker.textContent = snapshot.brokerConnected ? "🟢 MQTT" : "🔴 MQTT";
+  brokerDot.textContent = snapshot.brokerConnected ? "🟢" : "🔴";
   self.textContent = `${snapshot.self.name} (${snapshot.self.peerId})`;
   appVersion.textContent = `v${snapshot.self.version}`;
   renderTotals(snapshot);
@@ -356,80 +355,33 @@ function saveConfig(config: DemoConfig): void {
   }
 }
 
-function fillForm(config: DemoConfig): void {
-  urlInput.value = config.url;
-  usernameInput.value = config.username;
-  passwordInput.value = config.password;
-  nameInput.value = config.name;
-}
-
-function showConfigPanel(config?: DemoConfig | null, message?: string): void {
-  const initial = config ?? {
-    url: runtimeString("url") ?? env.VITE_MQTT_URL ?? DEFAULT_URL,
-    username: runtimeString("username") ?? env.VITE_MQTT_USERNAME ?? DEFAULT_USERNAME,
-    password: runtimeString("password") ?? env.VITE_MQTT_PASSWORD ?? "",
-    name: defaultName,
-  };
-  fillForm(initial);
-  configPanel.hidden = false;
-  configError.textContent = message ?? "";
-  editConfigButton.disabled = true;
-  resetButton.disabled = true;
-  usernameInput.focus();
-}
-
-function readForm(): DemoConfig | null {
-  const url = urlInput.value.trim();
-  const username = usernameInput.value.trim();
-  const password = passwordInput.value;
-  const name = nameInput.value.trim();
-  if (!url || !username || !password || !name) {
-    configError.textContent = "URL, username, password e client name sono obbligatori.";
-    return null;
-  }
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "ws:" && parsed.protocol !== "wss:") {
-      throw new Error("protocol");
-    }
-  } catch {
-    configError.textContent = "L'URL deve essere un URL WebSocket ws:// o wss:// valido.";
-    return null;
-  }
-  return { url, username, password, name };
-}
-
 async function stopPeer(): Promise<void> {
   const current = peer;
   peer = null;
   if (current) await current.stop().catch(() => undefined);
-  editConfigButton.disabled = true;
   resetButton.disabled = true;
   body.replaceChildren();
   totals.textContent = "";
   broker.dataset.connected = "false";
-  broker.textContent = "🔴 MQTT";
+  brokerDot.textContent = "🔴";
   self.textContent = "Not connected";
 }
 
 async function connect(config: DemoConfig): Promise<void> {
   lastConfig = config;
-  currentConfig = config;
   saveConfig(config);
   await stopPeer();
   if (!navigator.onLine) {
-    configPanel.hidden = true;
     errorBox.hidden = false;
     errorBox.textContent =
       "Sei offline. La UI resta disponibile dalla cache PWA; la mesh riprenderà online.";
     updateOnlineState();
     return;
   }
-  configPanel.hidden = true;
-  configError.textContent = "";
   errorBox.hidden = true;
   errorBox.textContent = "";
 
+  brokerUrlText.textContent = config.url;
   const mesh = createMeshPeer({
     url: config.url,
     username: config.username,
@@ -449,13 +401,11 @@ async function connect(config: DemoConfig): Promise<void> {
   mesh.onSnapshot(render);
   authPanel.hidden = true;
   byId<HTMLButtonElement>("logout").hidden = !authToken;
-  editConfigButton.disabled = false;
   resetButton.disabled = false;
   try {
     await mesh.start();
   } catch (error) {
     peer = null;
-    editConfigButton.disabled = true;
     resetButton.disabled = true;
     errorBox.hidden = false;
     errorBox.textContent = `Connessione fallita: ${error instanceof Error ? error.message : String(error)}`;
@@ -472,30 +422,17 @@ async function connect(config: DemoConfig): Promise<void> {
     if (!navigator.onLine) {
       updateOnlineState();
     } else {
-      showConfigPanel(config, "Connessione fallita. Controlla URL, username e password.");
+      showAuth("Connessione fallita. Riprova.");
     }
   }
 }
-
-configForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const config = readForm();
-  if (config) void connect(config);
-});
-
-editConfigButton.addEventListener("click", () => {
-  const config = currentConfig;
-  void stopPeer().then(() => {
-    showConfigPanel(config, "");
-  });
-});
 
 function updateOnlineState(): void {
   const offline = !navigator.onLine;
   offlineBanner.hidden = !offline;
   if (offline) {
     broker.dataset.connected = "false";
-    broker.textContent = "⚪ MQTT";
+    brokerDot.textContent = "⚪";
   }
 }
 
@@ -564,6 +501,7 @@ byId<HTMLButtonElement>("auth-resend").onclick = async () => {
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   authError.textContent = "";
+  localStorage.setItem(FRIENDLY_KEY, authFriendly.value.trim() || defaultName);
   try {
     if (authMode === "register") {
       await api.register(authEmail.value, authPassword.value);
@@ -586,6 +524,7 @@ authForm.addEventListener("submit", async (event) => {
       return;
     }
     if (authMode === "verify") {
+      localStorage.setItem(FRIENDLY_KEY, authFriendly.value.trim() || defaultName);
       const verified = await api.verifyEmail(authEmail.value, authTokenInput.value.trim());
       localStorage.setItem(TOKENS_KEY, JSON.stringify(verified));
       authToken = verified.accessToken;
@@ -593,7 +532,7 @@ authForm.addEventListener("submit", async (event) => {
         api,
         accessToken: verified.accessToken,
         storage: localStorage,
-        name: authEmail.value,
+        name: friendlyName(),
       });
       registryPeerId = registered.peer.peerId;
       await connect({
@@ -610,7 +549,7 @@ authForm.addEventListener("submit", async (event) => {
       api,
       accessToken: tokens.accessToken,
       storage: localStorage,
-      name: authEmail.value,
+      name: friendlyName(),
     });
     registryPeerId = registered.peer.peerId;
     await connect({
@@ -648,7 +587,7 @@ if (
         api,
         accessToken: tokens.accessToken,
         storage: localStorage,
-        name: authParams.get("email")!,
+        name: friendlyName(),
       });
       registryPeerId = registered.peer.peerId;
       history.replaceState({}, "", location.pathname);
@@ -703,7 +642,7 @@ if (authParams.has("auth")) {
     api,
     accessToken: tokens.accessToken,
     storage: localStorage,
-    name: defaultName,
+    name: friendlyName(),
   })
     .then((registered) => {
       registryPeerId = registered.peer.peerId;

@@ -286,3 +286,20 @@ th {
   color: #9aa8ba;
   font-size: 11px;
 }
+
+#broker-state {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 46vw;
+}
+#broker-state strong {
+  font-size: 13px;
+}
+#broker-url {
+  color: #9aa8ba;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

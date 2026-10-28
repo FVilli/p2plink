@@ -223,6 +223,8 @@ export class PeersController {
     if (!peer) throw new NotFoundException();
     this.owned(peer, user);
     if (peer.status !== "ACTIVE") throw new ConflictException("Peer is not active");
+    const requestedName =
+      typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 64) : peer.name;
     const challenge = await this.consume(body.challengeId, body.nonce, "CREDENTIALS", user.sub);
     if (
       challenge.peerId !== peer.id ||
@@ -257,6 +259,7 @@ export class PeersController {
       await tx.peer.update({
         where: { id: peer.id },
         data: {
+          name: requestedName,
           certificate: cert.token,
           certificateSerial: serial,
           certificateExpiresAt: cert.expiresAt,

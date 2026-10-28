@@ -225,7 +225,7 @@ try {
     broker: document.querySelector("#broker-state")?.textContent?.trim() ?? "",
     totals: document.querySelector("#totals")?.textContent ?? "",
     toggle: Boolean(document.querySelector("#toggle-p2p")),
-    settings: Boolean(document.querySelector("#edit-config")),
+    settings: false,
     reset: Boolean(document.querySelector("#reset-stats")),
   }));
   if (ui.toggle) throw new Error("removed P2P toggle is still present");
@@ -239,7 +239,7 @@ try {
   ) {
     throw new Error(`unexpected totals layout: ${ui.totals}`);
   }
-  if (!ui.settings || !ui.reset) throw new Error("self actions are missing");
+  if (!ui.reset) throw new Error("self actions are missing");
   console.log("2b. UI uses MQTT-only status, self actions and outbound/inbound totals");
 
   await pageA.waitForFunction(
@@ -381,35 +381,19 @@ try {
   const contextC = await browser.newContext();
   const pageC = await contextC.newPage();
   await pageC.goto("http://127.0.0.1:5174/");
-  await pageC.locator("#config-panel:not([hidden])").waitFor({ timeout: 10_000 });
-  const defaults = await pageC.evaluate(() => ({
-    url: document.querySelector("#broker-url")?.value,
-    username: document.querySelector("#broker-username")?.value,
-    name: document.querySelector("#client-name")?.value,
-  }));
-  if (
-    !defaults.url?.startsWith("wss://") ||
-    defaults.username !== "main:rmq-usr" ||
-    !defaults.name
-  ) {
-    throw new Error(`unexpected onboarding defaults: ${JSON.stringify(defaults)}`);
+  await pageC.locator("#auth-panel:not([hidden])").waitFor({ timeout: 10_000 });
+  if (await pageC.locator("#config-panel").count()) {
+    throw new Error("broker settings panel is still present");
   }
-  await pageC.fill("#broker-url", "ws://127.0.0.1:9002");
-  await pageC.fill("#broker-username", "demo");
-  await pageC.fill("#broker-password", "demo-pass");
-  await pageC.fill("#client-name", "e2e-onboard");
-  await pageC.click("#config-form button[type=submit]");
-  await pageC.waitForFunction(
-    () => document.querySelector("#broker-state")?.getAttribute("data-connected") === "true",
-    null,
-    { timeout: 20_000 },
-  );
-  const stored = await pageC.evaluate(() => localStorage.getItem("p2plink-demo-config"));
-  if (!stored || !stored.includes("e2e-onboard") || !stored.includes("ws://127.0.0.1:9002")) {
-    throw new Error(`onboarding config not stored: ${stored}`);
+  const header = await pageC.evaluate(() => ({
+    broker: document.querySelector("#broker-state")?.textContent ?? "",
+    url: document.querySelector("#broker-url")?.textContent ?? "",
+  }));
+  if (!header.broker.includes("MQTT") || header.url.trim() === "") {
+    throw new Error(`unexpected broker header: ${JSON.stringify(header)}`);
   }
   await contextC.close();
-  console.log("8. onboarding form saved url/username/password/client name in localStorage");
+  console.log("8. registry auth screen shown and broker settings removed");
 
   const pwaContext = await browser.newContext();
   const pwaPage = await pwaContext.newPage();
@@ -427,7 +411,7 @@ try {
     throw new Error("offline banner not visible after offline reload");
   }
   const pwaVersion = await pwaPage.locator("#app-version").innerText();
-  if (pwaVersion !== "v0.2.1") throw new Error(`unexpected app version: ${pwaVersion}`);
+  if (pwaVersion !== "v0.2.2") throw new Error(`unexpected app version: ${pwaVersion}`);
   await pwaContext.close();
   console.log("9. PWA opens offline from service worker cache and shows offline banner/version");
 

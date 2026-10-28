@@ -8,6 +8,7 @@ import {
   RegistryApi,
   ensureRegistryPeer,
   DEFAULT_REGISTRY_URL,
+  toFriendlyPeerName,
   type RegistryTokens,
 } from "@p2plink/demo-mesh";
 import { formatByteSize } from "@p2plink/core";
@@ -84,13 +85,12 @@ export default function App() {
     return auth === "verify-email" || auth === "reset-password" ? auth : "login";
   });
   const [authMessage, setAuthMessage] = useState("");
+  const [friendly, setFriendly] = useState(
+    () => localStorage.getItem("p2plink-friendly-name") ?? "",
+  );
   const registryUrl = runtimeString("registryUrl") ?? env.VITE_REGISTRY_URL ?? DEFAULT_REGISTRY_URL;
   const [config, setConfig] = useState<Config>(() => loadConfig() ?? defaults());
-  const [editing, setEditing] = useState(
-    !tokens &&
-      !loadConfig() &&
-      !(runtimeString("url") && runtimeString("username") && runtimeString("password")),
-  );
+  const [brokerUrl, setBrokerUrl] = useState("");
   const [error, setError] = useState("");
   const [online, setOnline] = useState(navigator.onLine);
   const [issues, setIssues] = useState<MeshIssue[]>([]);
@@ -152,6 +152,7 @@ export default function App() {
   }, [peer]);
   async function connect(c: Config) {
     setConfig(c);
+    setBrokerUrl(c.url);
     try {
       localStorage.setItem(KEY, JSON.stringify(c));
     } catch {
@@ -161,11 +162,9 @@ export default function App() {
     setPeer(null);
     if (previous) await previous.stop().catch(() => undefined);
     if (!navigator.onLine) {
-      setEditing(false);
       setError("Sei offline. La mesh riprenderà online.");
       return;
     }
-    setEditing(false);
     setError("");
     let mesh: MeshPeer;
     try {
@@ -186,7 +185,6 @@ export default function App() {
       });
     } catch (e) {
       setError(`Connessione fallita: ${e instanceof Error ? e.message : String(e)}`);
-      setEditing(true);
       return;
     }
     setPeer(mesh);
@@ -220,7 +218,6 @@ export default function App() {
       );
       setPeer(null);
       await mesh.stop().catch(() => undefined);
-      setEditing(navigator.onLine);
     }
   }
   async function authenticate(e: React.FormEvent<HTMLFormElement>) {
@@ -230,7 +227,10 @@ export default function App() {
     const d = new FormData(e.currentTarget),
       email = String(d.get("email") || "").trim(),
       password = String(d.get("password") || ""),
-      token = String(d.get("token") || "");
+      token = String(d.get("token") || ""),
+      requestedName = String(d.get("friendly") || "").trim();
+    setFriendly(requestedName);
+    localStorage.setItem("p2plink-friendly-name", requestedName);
     const api = new RegistryApi(registryUrl);
     try {
       if (authMode === "resend") {
@@ -245,19 +245,19 @@ export default function App() {
         setAuthMessage("If the account exists, a reset link has been sent.");
       } else if (authMode === "verify-email") {
         const result = await api.verifyEmail(email, token);
-        await acceptTokens(result);
+        await acceptTokens(result, requestedName);
       } else if (authMode === "reset-password") {
         await api.resetPassword(email, token, password);
         setAuthMessage("Password updated. Please log in.");
         setAuthMode("login");
       } else {
-        await acceptTokens(await api.login(email, password));
+        await acceptTokens(await api.login(email, password), requestedName);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   }
-  async function acceptTokens(value: RegistryTokens) {
+  async function acceptTokens(value: RegistryTokens, requestedName = friendly) {
     localStorage.setItem(ACCESS_KEY, value.accessToken);
     localStorage.setItem(REFRESH_KEY, value.refreshToken);
     setTokens(value);
@@ -267,9 +267,8 @@ export default function App() {
         api,
         accessToken: value.accessToken,
         storage: localStorage,
-        name: defaultName,
+        name: toFriendlyPeerName(requestedName || defaultName),
       });
-      setEditing(false);
       await connect({ ...peerInfo.mqtt, name: peerInfo.peer.name, peerId: peerInfo.peer.peerId });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -285,7 +284,7 @@ export default function App() {
     if (refresh) await new RegistryApi(registryUrl).logout(refresh, peerId).catch(() => undefined);
     localStorage.clear();
     setTokens(null);
-    setEditing(true);
+    setFriendly("");
     setError("");
   }
   async function resendVerification(e: React.FormEvent<HTMLFormElement>) {
@@ -306,7 +305,7 @@ export default function App() {
             api: new RegistryApi(registryUrl),
             accessToken: tokens.accessToken,
             storage: localStorage,
-            name: defaultName,
+            name: toFriendlyPeerName(friendly || defaultName),
           });
           await connect({ ...info.mqtt, name: info.peer.name, peerId: info.peer.peerId });
         } catch (err) {
@@ -343,25 +342,6 @@ export default function App() {
     window.addEventListener("online", on);
     return () => window.removeEventListener("online", on);
   }, [peer, config]);
-  async function openSettings() {
-    const previous = peer;
-    setPeer(null);
-    setSnapshot(null);
-    setIssues([]);
-    setError("");
-    if (previous) await previous.stop().catch(() => undefined);
-    setEditing(true);
-  }
-  const submit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const d = new FormData(e.currentTarget);
-    void connect({
-      url: String(d.get("url")).trim(),
-      username: String(d.get("username")).trim(),
-      password: String(d.get("password")),
-      name: String(d.get("name")).trim(),
-    });
-  };
   return (
     <>
       {!online && (
@@ -381,7 +361,9 @@ export default function App() {
             <p>Browser peer network</p>
           </div>
           <span id="broker-state" data-connected={String(snapshot?.brokerConnected ?? false)}>
-            {snapshot?.brokerConnected ? "🟢 MQTT" : online ? "🔴 MQTT" : "⚪ MQTT"}
+            <span id="broker-dot">{snapshot?.brokerConnected ? "🟢" : online ? "🔴" : "⚪"}</span>
+            <strong>MQTT</strong>
+            <small id="broker-url">{brokerUrl || "—"}</small>
           </span>
         </header>
         <section className="self">
@@ -396,15 +378,6 @@ export default function App() {
             </span>
           </div>
           <div className="self-actions">
-            <button
-              id="edit-config"
-              className="icon-button"
-              title="Impostazioni"
-              aria-label="Impostazioni"
-              onClick={() => void openSettings()}
-            >
-              ⚙️
-            </button>
             {tokens && (
               <button
                 id="logout"
@@ -480,6 +453,19 @@ export default function App() {
                 ) : null}
                 {authMode === "login" ||
                 authMode === "register" ||
+                authMode === "verify-email" ||
+                authMode === "reset-password" ? (
+                  <input
+                    name="friendly"
+                    type="text"
+                    maxLength={50}
+                    placeholder="Client name (e.g. monster)"
+                    value={friendly}
+                    onChange={(e) => setFriendly(e.target.value)}
+                  />
+                ) : null}
+                {authMode === "login" ||
+                authMode === "register" ||
                 authMode === "reset-password" ? (
                   <input
                     name="password"
@@ -527,48 +513,7 @@ export default function App() {
               </form>
             </section>
           )}
-        {editing && (
-          <section id="config-panel" className="config">
-            <form id="config-form" onSubmit={submit}>
-              <h2>Prima connessione</h2>
-              <p className="muted">
-                I dati vengono salvati solo nel localStorage di questo browser.
-              </p>
-              <label htmlFor="broker-url">Broker WebSocket URL</label>
-              <input
-                id="broker-url"
-                name="url"
-                type="url"
-                required
-                defaultValue={config.url}
-                placeholder={URL_DEFAULT}
-              />
-              <label htmlFor="broker-username">Username</label>
-              <input id="broker-username" name="username" required defaultValue={config.username} />
-              <label htmlFor="broker-password">Password</label>
-              <input
-                id="broker-password"
-                name="password"
-                type="password"
-                required
-                defaultValue={config.password}
-              />
-              <label htmlFor="client-name">Client name</label>
-              <input
-                id="client-name"
-                name="name"
-                required
-                maxLength={64}
-                defaultValue={config.name}
-              />
-              <p id="config-error" className="config-error">
-                {error}
-              </p>
-              <button type="submit">Connetti</button>
-            </form>
-          </section>
-        )}
-        {error && !editing && (
+        {error && (
           <div id="error" role="alert">
             {error}
           </div>

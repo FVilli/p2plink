@@ -154,7 +154,7 @@ export class RegistryApi {
   credentials(
     accessToken: string,
     peerId: string,
-    input: { challengeId: string; nonce: string; signature: string },
+    input: { challengeId: string; nonce: string; signature: string; name?: string },
   ): Promise<RegistryPeer> {
     return this.call(
       `/v1/peers/${encodeURIComponent(peerId)}/credentials`,
@@ -225,6 +225,7 @@ export async function ensureRegistryPeer(input: {
       challengeId: challenge.challengeId,
       nonce: challenge.nonce,
       signature,
+      name: input.name,
     });
     input.storage.setItem(REGISTRY_PEER_KEY, JSON.stringify(peer));
     return peer;
@@ -249,4 +250,29 @@ export async function ensureRegistryPeer(input: {
 export function clearRegistryStorage(storage: StorageLike): void {
   storage.removeItem(REGISTRY_IDENTITY_KEY);
   storage.removeItem(REGISTRY_PEER_KEY);
+}
+
+/** Browser label appended to the user's friendly name. */
+export function browserSuffix(
+  userAgent = typeof navigator === "undefined" ? "" : navigator.userAgent,
+): string {
+  const ua = userAgent;
+  if (/EdgiOS|Edg\//u.test(ua)) return "edge";
+  if (/OPR\/|Opera|OPiOS/u.test(ua)) return "opera";
+  if (/FxiOS|Firefox\//u.test(ua)) return "firefox";
+  if (/CriOS|Chrome\/|Chromium\//u.test(ua)) return "chrome";
+  if (/SamsungBrowser/u.test(ua)) return "samsung";
+  if (/Safari\//u.test(ua)) return "safari";
+  return "browser";
+}
+
+/** `monster` -> `monster-chrome`; the browser suffix avoids ambiguous peer names. */
+export function toFriendlyPeerName(base: string, userAgent?: string): string {
+  const normalized =
+    base
+      .trim()
+      .replace(/\s+/gu, "-")
+      .replace(/[^A-Za-z0-9._-]/gu, "")
+      .slice(0, 50) || "browser";
+  return `${normalized}-${browserSuffix(userAgent)}`.slice(0, 64);
 }

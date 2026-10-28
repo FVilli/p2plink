@@ -19,7 +19,10 @@
           <h1>P2PLink Mesh <span id="app-version" class="version"></span></h1>
           <p>Browser peer network</p>
         </div>
-        <span id="broker-state" data-connected="false">⚪ MQTT</span>
+        <span id="broker-state" data-connected="false">
+          <span id="broker-dot">⚪</span> <strong>MQTT</strong>
+          <small id="broker-url">—</small>
+        </span>
       </header>
       <section class="self">
         <div class="self-identity">
@@ -27,16 +30,6 @@
           <span id="self-peer">Starting…</span>
         </div>
         <div class="self-actions">
-          <button
-            id="edit-config"
-            class="icon-button"
-            type="button"
-            title="Impostazioni"
-            aria-label="Impostazioni"
-            disabled
-          >
-            ⚙️
-          </button>
           <button
             id="logout"
             class="icon-button"
@@ -63,6 +56,8 @@
         <form id="auth-form">
           <h2 id="auth-title">Sign in</h2>
           <label>Email</label><input id="auth-email" type="email" autocomplete="email" required />
+          <label>Client name</label
+          ><input id="auth-friendly" type="text" maxlength="50" placeholder="monster" />
           <label id="auth-token-label" hidden>Email token</label
           ><input id="auth-token" type="text" autocomplete="one-time-code" hidden />
           <label id="auth-password-label">Password</label
@@ -78,22 +73,7 @@
           </div>
         </form>
       </section>
-      <section id="config-panel" class="config" hidden>
-        <form id="config-form">
-          <h2>Prima connessione</h2>
-          <p class="muted">I dati vengono salvati solo nel localStorage di questo browser.</p>
-          <label for="broker-url">Broker WebSocket URL</label>
-          <input id="broker-url" type="url" required placeholder="wss://mqtt-ws.fvsg.it:443/ws" />
-          <label for="broker-username">Username</label>
-          <input id="broker-username" type="text" required placeholder="main:rmq-usr" />
-          <label for="broker-password">Password</label>
-          <input id="broker-password" type="password" autocomplete="current-password" required />
-          <label for="client-name">Client name</label>
-          <input id="client-name" type="text" required maxlength="64" />
-          <p id="config-error" class="config-error"></p>
-          <button type="submit">Connetti</button>
-        </form>
-      </section>
+
       <div id="error" role="alert" hidden></div>
       <section class="totals" id="totals"></section>
       <h2 class="section-title">🔗 Connected peers</h2>
