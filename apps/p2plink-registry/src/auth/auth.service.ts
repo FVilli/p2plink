@@ -81,7 +81,7 @@ export class AuthService {
       });
       if (peer) {
         try {
-          await this.broker.disablePeer(peer.peerId);
+          await this.broker.deletePeer(peer.peerId);
         } catch {
           // Local logout must still complete if the broker is unavailable.
         }
