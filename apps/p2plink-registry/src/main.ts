@@ -29,8 +29,4 @@ const runtimeAdminDir = join(fileURLToPath(new URL(".", import.meta.url)), "admi
 const adminDir = existsSync(localAdminDir) ? localAdminDir : runtimeAdminDir;
 await fastify.register(fastifyStatic, { root: adminDir, prefix: "/admin/", decorateReply: false });
 fastify.get("/admin", (_req: unknown, reply: { redirect: (url: string) => void }) => reply.redirect("/admin/"));
-fastify.setNotFoundHandler((request: { url: string }, reply: { type: (type: string) => { sendFile: (name: string) => void } }) => {
-  if (request.url.startsWith("/admin/")) return reply.type("text/html").sendFile("index.html");
-  throw new Error("Not found");
-});
 await app.listen(config.port, "0.0.0.0");
