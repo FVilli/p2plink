@@ -101,17 +101,59 @@ class BytesRatePipe implements PipeTransform {
       <section id="auth-panel" class="config" [hidden]="!authVisible()">
         <form (submit)="authSubmit($event)">
           <div class="auth-modes">
-            <button class="auth-mode auth-signin" type="button" (click)="setAuthMode('Login')">🔑 Sign in</button>
-            <button class="auth-mode auth-create" type="button" (click)="setAuthMode('Register')">✨ Create</button>
-            <button class="auth-mode auth-forgot" type="button" (click)="setAuthMode('Forgot password')">🔐 Forgot</button>
-            <button class="auth-mode auth-resend" type="button" (click)="setAuthMode('Resend')">📨 Resend</button>
+            <button class="auth-mode auth-signin" type="button" (click)="setAuthMode('Login')">
+              🔑 Sign in
+            </button>
+            <button class="auth-mode auth-create" type="button" (click)="setAuthMode('Register')">
+              ✨ Create
+            </button>
+            <button
+              class="auth-mode auth-forgot"
+              type="button"
+              (click)="setAuthMode('Forgot password')"
+            >
+              🔐 Forgot
+            </button>
+            <button class="auth-mode auth-resend" type="button" (click)="setAuthMode('Resend')">
+              📨 Resend
+            </button>
           </div>
           <h2>{{ authMode() }}</h2>
           <p class="muted">P2PLink Registry account</p>
           <label>Email</label><input name="email" type="email" required [value]="authEmail()" />
           @if (authMode() === "Login" || authMode() === "Register") {
-            <label>Password</label><input name="password" [type]="passwordVisible() ? 'text' : 'password'" [attr.minlength]="authMode() === 'Login' ? 1 : 8" required /><button type="button" [attr.title]="passwordVisible() ? 'Hide password' : 'Show password'" [attr.aria-label]="passwordVisible() ? 'Hide password' : 'Show password'" (click)="togglePassword()">👁️</button>
-            @if (authMode() === "Register") { <label>Confirm password</label><input name="confirmPassword" [type]="confirmVisible() ? 'text' : 'password'" minlength="8" required /><button type="button" [attr.title]="confirmVisible() ? 'Hide confirm password' : 'Show confirm password'" [attr.aria-label]="confirmVisible() ? 'Hide confirm password' : 'Show confirm password'" (click)="toggleConfirm()">👁️</button> }
+            <label>Password</label
+            ><input
+              name="password"
+              [type]="passwordVisible() ? 'text' : 'password'"
+              [attr.minlength]="authMode() === 'Login' ? 1 : 8"
+              required
+            /><button
+              type="button"
+              [attr.title]="passwordVisible() ? 'Hide password' : 'Show password'"
+              [attr.aria-label]="passwordVisible() ? 'Hide password' : 'Show password'"
+              (click)="togglePassword()"
+            >
+              👁️
+            </button>
+            @if (authMode() === "Register") {
+              <label>Confirm password</label
+              ><input
+                name="confirmPassword"
+                [type]="confirmVisible() ? 'text' : 'password'"
+                minlength="8"
+                required
+              /><button
+                type="button"
+                [attr.title]="confirmVisible() ? 'Hide confirm password' : 'Show confirm password'"
+                [attr.aria-label]="
+                  confirmVisible() ? 'Hide confirm password' : 'Show confirm password'
+                "
+                (click)="toggleConfirm()"
+              >
+                👁️
+              </button>
+            }
           }
           @if (authMode() === "Login") {
             <label>Client name</label
@@ -127,8 +169,38 @@ class BytesRatePipe implements PipeTransform {
             <label>Token</label><input name="token" required [value]="authToken()" />
           }
           @if (authMode() === "Reset password") {
-            <label>New password</label><input name="newPassword" [type]="passwordVisible() ? 'text' : 'password'" minlength="8" required /><button type="button" [attr.title]="passwordVisible() ? 'Hide new password' : 'Show new password'" [attr.aria-label]="passwordVisible() ? 'Hide new password' : 'Show new password'" (click)="togglePassword()">👁️</button>
-            <label>Confirm new password</label><input name="confirmNewPassword" [type]="confirmVisible() ? 'text' : 'password'" minlength="8" required /><button type="button" [attr.title]="confirmVisible() ? 'Hide confirm new password' : 'Show confirm new password'" [attr.aria-label]="confirmVisible() ? 'Hide confirm new password' : 'Show confirm new password'" (click)="toggleConfirm()">👁️</button>
+            <label>New password</label
+            ><input
+              name="newPassword"
+              [type]="passwordVisible() ? 'text' : 'password'"
+              minlength="8"
+              required
+            /><button
+              type="button"
+              [attr.title]="passwordVisible() ? 'Hide new password' : 'Show new password'"
+              [attr.aria-label]="passwordVisible() ? 'Hide new password' : 'Show new password'"
+              (click)="togglePassword()"
+            >
+              👁️
+            </button>
+            <label>Confirm new password</label
+            ><input
+              name="confirmNewPassword"
+              [type]="confirmVisible() ? 'text' : 'password'"
+              minlength="8"
+              required
+            /><button
+              type="button"
+              [attr.title]="
+                confirmVisible() ? 'Hide confirm new password' : 'Show confirm new password'
+              "
+              [attr.aria-label]="
+                confirmVisible() ? 'Hide confirm new password' : 'Show confirm new password'
+              "
+              (click)="toggleConfirm()"
+            >
+              👁️
+            </button>
           }
           <p class="config-error">{{ authError() }}</p>
           <button [class]="authSubmitClass()">
@@ -267,8 +339,12 @@ class App {
   authToken = signal("");
   passwordVisible = signal(false);
   confirmVisible = signal(false);
-  togglePassword() { this.passwordVisible.update(value => !value); }
-  toggleConfirm() { this.confirmVisible.update(value => !value); }
+  togglePassword() {
+    this.passwordVisible.update((value) => !value);
+  }
+  toggleConfirm() {
+    this.confirmVisible.update((value) => !value);
+  }
   friendly = signal("");
   friendlyName() {
     return toFriendlyPeerName(this.friendly() || this.config.name || "browser");
@@ -364,7 +440,8 @@ class App {
       email = String(d.get("email")),
       password = String(d.get("password") ?? ""),
       token = String(d.get("token") ?? ""),
-      friendly = this.authMode() === "Login" ? String(d.get("friendly") ?? "").trim() : this.friendly();
+      friendly =
+        this.authMode() === "Login" ? String(d.get("friendly") ?? "").trim() : this.friendly();
     this.authEmail.set(email);
     this.friendly.set(friendly || this.friendly());
     if (this.authMode() === "Login") localStorage.setItem(FRIENDLY_KEY, this.friendly());
