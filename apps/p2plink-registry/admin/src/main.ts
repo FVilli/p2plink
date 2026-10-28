@@ -1,4 +1,4 @@
-import { Component, inject } from "@angular/core";
+import { Component, inject, OnDestroy } from "@angular/core";
 import { bootstrapApplication } from "@angular/platform-browser";
 import { FormsModule } from "@angular/forms";
 import { CommonModule } from "@angular/common";
@@ -17,6 +17,11 @@ interface OnlinePeer {
   kind: string;
   version: string;
   lastSeen: number;
+  traffic?: { p2p: TrafficDirection; mqtt: TrafficDirection };
+}
+interface TrafficDirection {
+  tx: { bytes: number };
+  rx: { bytes: number };
 }
 interface AdminStats {
   online: number;
@@ -39,7 +44,7 @@ interface AdminPeer {
   peerId: string;
   name?: string;
   status: string;
-  user?: { username: string };
+  user?: { id: string; username: string };
   grant?: { status: string };
 }
 interface NewUser {
@@ -60,6 +65,9 @@ interface NewUser {
         <p>Control room for your peer network</p>
       </div>
       <div class="actions" *ngIf="token">
+        <label class="check"
+          ><input type="checkbox" [(ngModel)]="autoRefresh" /> Auto-refresh every 30 seconds</label
+        >
         <button class="secondary" (click)="load()">↻ Refresh</button
         ><button class="danger" (click)="logout()">↪ Logout</button>
       </div>
@@ -112,8 +120,9 @@ interface NewUser {
           <small>🟢 Online now</small><strong>{{ stats?.online ?? "—" }}</strong>
         </article>
       </section>
-      <section class="panel">
+      <section class="panel online-panel">
         <h2>🟢 Online now</h2>
+        <p class="traffic-note">Traffic totals are reported by client (bytes; not rates).</p>
         <div class="tablewrap" *ngIf="stats?.presence?.length; else noOnline">
           <table>
             <thead>
@@ -123,6 +132,8 @@ interface NewUser {
                 <th>Kind</th>
                 <th>Version</th>
                 <th>Last seen</th>
+                <th>Reported P2P tx/rx</th>
+                <th>Reported MQTT tx/rx</th>
               </tr>
             </thead>
             <tbody>
@@ -132,6 +143,14 @@ interface NewUser {
                 <td>{{ p.kind }}</td>
                 <td>{{ p.version }}</td>
                 <td>{{ p.lastSeen | date: "medium" }}</td>
+                <td>
+                  {{ formatBytes(p.traffic?.p2p?.tx?.bytes ?? 0) }} /
+                  {{ formatBytes(p.traffic?.p2p?.rx?.bytes ?? 0) }}
+                </td>
+                <td>
+                  {{ formatBytes(p.traffic?.mqtt?.tx?.bytes ?? 0) }} /
+                  {{ formatBytes(p.traffic?.mqtt?.rx?.bytes ?? 0) }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -152,15 +171,22 @@ interface NewUser {
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let u of users">
+                <tr
+                  *ngFor="let u of users"
+                  (click)="selectUser(u)"
+                  [class.selected]="selectedUser?.id === u.id"
+                >
                   <td>{{ u.username }}</td>
                   <td>{{ u.role }}</td>
                   <td>
                     <span class="badge">{{ u.status }}</span>
                   </td>
                   <td>
-                    <button class="tiny" (click)="setUserStatus(u)">
+                    <button class="tiny" (click)="setUserStatus(u); $event.stopPropagation()">
                       {{ u.status === "ACTIVE" ? "Disable" : "Enable" }}
+                    </button>
+                    <button class="tiny revoke" (click)="deleteUser(u); $event.stopPropagation()">
+                      Delete
                     </button>
                   </td>
                 </tr>
@@ -189,7 +215,9 @@ interface NewUser {
           </form>
         </section>
         <section class="panel">
-          <h2>🛰️ Peers &amp; clients</h2>
+          <h2>🛰️ Clients{{ selectedUser ? " for " + selectedUser.username : "" }}</h2>
+          <p *ngIf="!selectedUser">Select a user to view their clients.</p>
+          <p class="traffic-note">Traffic totals are reported by client (bytes; not rates).</p>
           <div class="tablewrap">
             <table>
               <thead>
@@ -199,11 +227,13 @@ interface NewUser {
                   <th>User</th>
                   <th>Status</th>
                   <th>Broker grant</th>
+                  <th>Reported P2P tx/rx bytes</th>
+                  <th>Reported MQTT tx/rx bytes</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                <tr *ngFor="let p of peers">
+                <tr *ngFor="let p of selectedPeers">
                   <td>{{ p.peerId }}</td>
                   <td>{{ p.name || "—" }}</td>
                   <td>{{ p.user?.username || "—" }}</td>
@@ -212,13 +242,15 @@ interface NewUser {
                   </td>
                   <td>{{ p.grant?.status || "—" }}</td>
                   <td>
-                    <button
-                      class="tiny revoke"
-                      [disabled]="p.status === 'REVOKED'"
-                      (click)="revoke(p)"
-                    >
-                      ⛔ Revoke
-                    </button>
+                    {{ formatBytes(trafficFor(p.peerId)?.p2p?.tx?.bytes ?? 0) }} /
+                    {{ formatBytes(trafficFor(p.peerId)?.p2p?.rx?.bytes ?? 0) }}
+                  </td>
+                  <td>
+                    {{ formatBytes(trafficFor(p.peerId)?.mqtt?.tx?.bytes ?? 0) }} /
+                    {{ formatBytes(trafficFor(p.peerId)?.mqtt?.rx?.bytes ?? 0) }}
+                  </td>
+                  <td>
+                    <button class="tiny revoke" (click)="deletePeer(p)">⛔ Delete</button>
                   </td>
                 </tr>
               </tbody>
@@ -230,7 +262,7 @@ interface NewUser {
   </main>`,
   styles: [],
 })
-class AdminApp {
+class AdminApp implements OnDestroy {
   private http = inject(HttpClient);
   token = sessionStorage.getItem("admin-token") || "";
   username = "";
@@ -241,6 +273,36 @@ class AdminApp {
   users: AdminUser[] = [];
   peers: AdminPeer[] = [];
   newUser: NewUser = { username: "", password: "", role: "USER" };
+  autoRefresh = true;
+  selectedUser?: AdminUser;
+  private timer = setInterval(() => {
+    if (this.autoRefresh) this.load();
+  }, 30_000);
+  private loading = false;
+  ngOnDestroy() {
+    clearInterval(this.timer);
+  }
+  get selectedPeers() {
+    return this.selectedUser ? this.peers.filter((p) => p.user?.id === this.selectedUser?.id) : [];
+  }
+  selectUser(user: AdminUser) {
+    this.selectedUser = user;
+  }
+  trafficFor(peerId: string) {
+    return this.stats?.presence.find((p) => p.peerId === peerId)?.traffic;
+  }
+  formatBytes(bytes: number) {
+    if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ["KB", "MB", "GB", "TB"];
+    let value = bytes;
+    let unit = -1;
+    do {
+      value /= 1024;
+      unit += 1;
+    } while (value >= 1024 && unit < units.length - 1);
+    return `${value.toFixed(1)} ${units[unit]}`;
+  }
   login() {
     this.error = "";
     this.http
@@ -255,15 +317,19 @@ class AdminApp {
       });
   }
   load() {
+    if (this.loading || !this.token) return;
+    this.loading = true;
     this.forbidden = false;
     const headers = new HttpHeaders({ Authorization: `Bearer ${this.token}` });
     this.http.get<AdminStats>("/v1/admin/stats", { headers }).subscribe({
       next: (r) => {
         this.stats = r;
+        this.loading = false;
         this.error = "";
         this.fetchTables(headers);
       },
       error: (e: HttpErrorResponse) => {
+        this.loading = false;
         if (e.status === 403) this.forbidden = true;
         else if (e.status === 401) this.logout();
         else this.error = this.message(e);
@@ -304,16 +370,29 @@ class AdminApp {
         error: (e: HttpErrorResponse) => (this.error = this.message(e)),
       });
   }
-  revoke(p: AdminPeer) {
-    if (!confirm(`Revoke peer ${p.peerId}?`)) return;
-    this.http
-      .patch(
-        `/v1/admin/peers/${p.id}/revoke`,
-        {},
-        { headers: { Authorization: `Bearer ${this.token}` } },
+  deletePeer(p: AdminPeer) {
+    if (
+      !confirm(
+        `Delete client ${p.peerId}? This removes the client and forces its user to sign in again.`,
       )
+    )
+      return;
+    this.http
+      .delete(`/v1/admin/peers/${p.id}`, { headers: { Authorization: `Bearer ${this.token}` } })
       .subscribe({
         next: () => this.load(),
+        error: (e: HttpErrorResponse) => (this.error = this.message(e)),
+      });
+  }
+  deleteUser(u: AdminUser) {
+    if (!confirm(`Delete user ${u.username} and all their clients and sessions?`)) return;
+    this.http
+      .delete(`/v1/admin/users/${u.id}`, { headers: { Authorization: `Bearer ${this.token}` } })
+      .subscribe({
+        next: () => {
+          if (this.selectedUser?.id === u.id) this.selectedUser = undefined;
+          this.load();
+        },
         error: (e: HttpErrorResponse) => (this.error = this.message(e)),
       });
   }

@@ -143,6 +143,13 @@ button {
 .c6 {
   border-bottom: 3px solid #51df8e;
 }
+.online-panel {
+  margin-bottom: 18px;
+}
+tr.selected {
+  background: #202b47;
+  cursor: pointer;
+}
 .columns {
   display: grid;
   grid-template-columns: 1fr 1.2fr;

@@ -9,6 +9,48 @@ export interface PresenceRecord {
   kind: string;
   version: string;
   lastSeen: number;
+  traffic: {
+    p2p: { tx: TrafficCounters; rx: TrafficCounters };
+    mqtt: { tx: TrafficCounters; rx: TrafficCounters };
+  };
+}
+
+export interface TrafficCounters {
+  messages: number;
+  bytes: number;
+}
+
+function trafficCounters(value: unknown): TrafficCounters {
+  if (!value || typeof value !== "object") return { messages: 0, bytes: 0 };
+  const counters = value as Record<string, unknown>;
+  const valid = (number: unknown) =>
+    typeof number === "number" && Number.isFinite(number) && number >= 0 ? number : 0;
+  return { messages: valid(counters.messages), bytes: valid(counters.bytes) };
+}
+
+function trafficDirection(value: unknown) {
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  return { tx: trafficCounters(record.tx), rx: trafficCounters(record.rx) };
+}
+
+function normalizeTraffic(value: unknown): PresenceRecord["traffic"] {
+  const traffic = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const legacyP2p = trafficDirection(traffic.p2p);
+  const legacyMqtt = trafficDirection(traffic.mqtt);
+  return {
+    p2p: traffic.p2p
+      ? legacyP2p
+      : {
+          tx: trafficCounters((traffic.tx as Record<string, unknown> | undefined)?.p2p),
+          rx: trafficCounters((traffic.rx as Record<string, unknown> | undefined)?.p2p),
+        },
+    mqtt: traffic.mqtt
+      ? legacyMqtt
+      : {
+          tx: trafficCounters((traffic.tx as Record<string, unknown> | undefined)?.mqtt),
+          rx: trafficCounters((traffic.rx as Record<string, unknown> | undefined)?.mqtt),
+        },
+  };
 }
 
 @Injectable()
@@ -82,6 +124,7 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
         kind: value.kind,
         version: value.version,
         lastSeen,
+        traffic: normalizeTraffic(value.traffic),
       });
     } catch {
       /* Ignore malformed broker payloads. */

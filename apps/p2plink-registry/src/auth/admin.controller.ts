@@ -2,6 +2,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   Inject,
   Param,
@@ -11,6 +12,7 @@ import {
 } from "@nestjs/common";
 import { IsIn, IsString, MinLength } from "class-validator";
 import { AuthService } from "./auth.service.js";
+import { CurrentUser, type CurrentUserValue } from "./current-user.decorator.js";
 import { JwtAuthGuard } from "./jwt-auth.guard.js";
 import { AdminGuard } from "./admin.guard.js";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -67,7 +69,7 @@ export class AdminController {
       grants,
       brokerHealthy: this.broker.isHealthy(),
       traffic: {
-        measured: "live MQTT presence; MQTT byte traffic is not exposed",
+        measured: "client-reported P2P and MQTT traffic totals in live presence; not rates",
         presence: online,
       },
     };
@@ -77,23 +79,53 @@ export class AdminController {
   @Get("peers")
   peers() {
     return this.prisma.peer.findMany({
-      include: { user: { select: { username: true } }, grant: true },
+      include: { user: { select: { id: true, username: true } }, grant: true },
       orderBy: { createdAt: "desc" },
     });
   }
 
-  @ApiOperation({ summary: "Revoke a peer" })
-  @Patch("peers/:id/revoke")
-  async revoke(@Param("id") id: string) {
+  @ApiOperation({ summary: "Delete a peer and revoke its user's sessions" })
+  @Delete("peers/:id")
+  async deletePeer(@Param("id") id: string) {
     const peer = await this.prisma.peer.findFirst({ where: { OR: [{ id }, { peerId: id }] } });
     if (!peer) throw new ConflictException("Peer not found");
-    await this.broker.disablePeer(peer.peerId);
-    await this.prisma.peer.update({ where: { id: peer.id }, data: { status: "REVOKED" } });
-    await this.prisma.brokerGrant.updateMany({
-      where: { peerId: peer.id },
-      data: { status: "REVOKED" },
+    try {
+      await this.broker.deletePeer(peer.peerId);
+    } catch (error) {
+      if (!(error instanceof Error) || !/not found|does not exist/i.test(error.message))
+        throw error;
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.session.updateMany({
+        where: { userId: peer.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.peer.delete({ where: { id: peer.id } });
     });
     return { ok: true };
+  }
+
+  @ApiOperation({ summary: "Delete a user, broker clients, and sessions" })
+  @Delete("users/:id")
+  async deleteUser(@Param("id") id: string, @CurrentUser() current: CurrentUserValue) {
+    if (id === current.sub)
+      throw new ConflictException("Cannot delete the authenticated administrator");
+    const user = await this.prisma.user.findUnique({ where: { id }, include: { peers: true } });
+    if (!user) throw new ConflictException("User not found");
+    for (const peer of user.peers) {
+      try {
+        await this.broker.deletePeer(peer.peerId);
+      } catch (error) {
+        if (!(error instanceof Error) || !/not found|does not exist/i.test(error.message))
+          throw error;
+      }
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.session.deleteMany({ where: { userId: id } });
+      await tx.peerChallenge.deleteMany({ where: { userId: id } });
+      await tx.user.delete({ where: { id } });
+    });
+    return { ok: true, deleted: user.username };
   }
 
   @ApiOperation({ summary: "List registry users" })
