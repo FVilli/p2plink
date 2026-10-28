@@ -38,7 +38,7 @@
             aria-label="Logout"
             hidden
           >
-            ↪
+            🚪
           </button>
           <button
             id="reset-stats"
@@ -66,10 +66,13 @@
           ><input id="auth-new-password" type="password" autocomplete="new-password" hidden />
           <p id="auth-error" class="config-error" role="alert"></p>
           <button id="auth-submit" type="submit">Continue</button>
-          <div class="auth-actions">
-            <button id="auth-register" type="button">Create account</button
-            ><button id="auth-forgot" type="button">Forgot password</button
-            ><button id="auth-resend" type="button">Resend verification</button>
+          <div class="auth-modes">
+            <button id="auth-signin" class="auth-mode auth-signin" type="button">🔑 Sign in</button>
+            <button id="auth-register" class="auth-mode auth-create" type="button">
+              ✨ Create
+            </button>
+            <button id="auth-forgot" class="auth-mode auth-forgot" type="button">🔐 Forgot</button>
+            <button id="auth-resend" class="auth-mode auth-resend" type="button">📨 Resend</button>
           </div>
         </form>
       </section>

@@ -303,3 +303,34 @@ th {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.auth-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+.auth-mode {
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 9px 11px;
+}
+.auth-signin {
+  background: #2563eb;
+}
+.auth-create {
+  background: #15803d;
+}
+.auth-forgot {
+  background: #b45309;
+}
+.auth-resend {
+  background: #7c3aed;
+}
+.auth-reset {
+  background: #b91c1c;
+}

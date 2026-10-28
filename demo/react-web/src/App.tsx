@@ -386,7 +386,7 @@ export default function App() {
                 aria-label="Logout"
                 onClick={() => void logout()}
               >
-                ⇥
+                🚪
               </button>
             )}
             <button
@@ -477,39 +477,66 @@ export default function App() {
                     }
                   />
                 ) : null}
-                <button type="submit">
+                <button
+                  type="submit"
+                  className={
+                    authMode === "reset-password"
+                      ? "auth-reset"
+                      : authMode === "register"
+                        ? "auth-create"
+                        : authMode === "forgot"
+                          ? "auth-forgot"
+                          : authMode === "resend"
+                            ? "auth-resend"
+                            : "auth-signin"
+                  }
+                >
                   {authMode === "verify-email"
                     ? "Verify email"
                     : authMode === "reset-password"
                       ? "Reset password"
                       : authMode === "forgot"
-                        ? "Send reset link"
+                        ? "Forgot"
                         : authMode === "resend"
-                          ? "Resend verification"
+                          ? "Resend"
                           : authMode === "register"
-                            ? "Register"
-                            : "Login"}
+                            ? "Create"
+                            : "Sign in"}
                 </button>
                 <p className="config-error" role="alert">
                   {error}
                 </p>
                 <p className="muted">{authMessage}</p>
-                {authMode !== "verify-email" && authMode !== "reset-password" && (
-                  <div className="auth-links">
-                    <button type="button" onClick={() => setAuthMode("login")}>
-                      Login
-                    </button>
-                    <button type="button" onClick={() => setAuthMode("register")}>
-                      Register
-                    </button>
-                    <button type="button" onClick={() => setAuthMode("forgot")}>
-                      Forgot password
-                    </button>
-                    <button type="button" onClick={() => setAuthMode("resend")}>
-                      Resend verification
-                    </button>
-                  </div>
-                )}
+                <div className="auth-modes">
+                  <button
+                    className="auth-mode auth-signin"
+                    type="button"
+                    onClick={() => setAuthMode("login")}
+                  >
+                    🔑 Sign in
+                  </button>
+                  <button
+                    className="auth-mode auth-create"
+                    type="button"
+                    onClick={() => setAuthMode("register")}
+                  >
+                    ✨ Create
+                  </button>
+                  <button
+                    className="auth-mode auth-forgot"
+                    type="button"
+                    onClick={() => setAuthMode("forgot")}
+                  >
+                    🔐 Forgot
+                  </button>
+                  <button
+                    className="auth-mode auth-resend"
+                    type="button"
+                    onClick={() => setAuthMode("resend")}
+                  >
+                    📨 Resend
+                  </button>
+                </div>
               </form>
             </section>
           )}

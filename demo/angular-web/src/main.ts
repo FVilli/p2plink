@@ -85,7 +85,7 @@ class BytesRatePipe implements PipeTransform {
             [hidden]="!registrySession()"
             (click)="logout()"
           >
-            ⇥
+            🚪
           </button>
           <button
             id="reset-stats"
@@ -103,14 +103,16 @@ class BytesRatePipe implements PipeTransform {
           <h2>{{ authMode() }}</h2>
           <p class="muted">P2PLink Registry account</p>
           <label>Email</label><input name="email" type="email" required [value]="authEmail()" />
-          <label>Client name</label
-          ><input
-            name="friendly"
-            type="text"
-            maxlength="50"
-            placeholder="monster"
-            [value]="friendly()"
-          />
+          @if (authMode() !== "Resend") {
+            <label>Client name</label
+            ><input
+              name="friendly"
+              type="text"
+              maxlength="50"
+              placeholder="monster"
+              [value]="friendly()"
+            />
+          }
           @if (authMode() === "Login" || authMode() === "Register") {
             <label>Password (min 12 characters)</label
             ><input name="password" type="password" minlength="12" required />
@@ -123,20 +125,28 @@ class BytesRatePipe implements PipeTransform {
             ><input name="newPassword" type="password" minlength="12" required />
           }
           <p class="config-error">{{ authError() }}</p>
-          <button>{{ authMode() }}</button>
+          <button [class]="authSubmitClass()">
+            {{ authMode() === "Resend" ? "Resend" : authMode() }}
+          </button>
+          <div class="auth-modes">
+            <button class="auth-mode auth-signin" type="button" (click)="setAuthMode('Login')">
+              🔑 Sign in
+            </button>
+            <button class="auth-mode auth-create" type="button" (click)="setAuthMode('Register')">
+              ✨ Create
+            </button>
+            <button
+              class="auth-mode auth-forgot"
+              type="button"
+              (click)="setAuthMode('Forgot password')"
+            >
+              🔐 Forgot
+            </button>
+            <button class="auth-mode auth-resend" type="button" (click)="setAuthMode('Resend')">
+              📨 Resend
+            </button>
+          </div>
         </form>
-        @if (authMode() === "Login") {
-          <p>
-            <button type="button" (click)="setAuthMode('Register')">Register</button>
-            <button type="button" (click)="setAuthMode('Forgot password')">Forgot password</button>
-          </p>
-        }
-        @if (authMode() === "Verify email") {
-          <button type="button" (click)="resendVerification()">Resend verification</button>
-        }
-        @if (authMode() !== "Login") {
-          <button type="button" (click)="setAuthMode('Login')">Back to login</button>
-        }
       </section>
       <div id="error" [hidden]="!error()">{{ error() }}</div>
       <section id="totals" class="totals">
@@ -369,6 +379,11 @@ class App {
     this.authError.set("");
     const api = new RegistryApi(this.registryUrl);
     try {
+      if (this.authMode() === "Resend") {
+        await api.resendVerification(email);
+        this.authError.set("If the account exists, verification instructions were sent.");
+        return;
+      }
       if (this.authMode() === "Register") {
         await api.register(email, password);
         this.setAuthMode("Verify email");
@@ -397,13 +412,19 @@ class App {
       this.authError.set(String(err));
     }
   }
-  async resendVerification() {
-    try {
-      await new RegistryApi(this.registryUrl).resendVerification(this.authEmail());
-      this.authError.set("Verification email sent.");
-    } catch (e) {
-      this.authError.set(String(e));
-    }
+  authSubmitClass() {
+    const mode = this.authMode();
+    return mode === "Login"
+      ? "auth-signin"
+      : mode === "Register"
+        ? "auth-create"
+        : mode === "Forgot password"
+          ? "auth-forgot"
+          : mode === "Resend"
+            ? "auth-resend"
+            : mode === "Reset password"
+              ? "auth-reset"
+              : "";
   }
   async connectRegistry(tokens: RegistryTokens) {
     try {

@@ -76,7 +76,7 @@ const authEmail = byId<HTMLInputElement>("auth-email");
 const authPassword = byId<HTMLInputElement>("auth-password");
 const authError = byId<HTMLParagraphElement>("auth-error");
 const authFriendly = byId<HTMLInputElement>("auth-friendly");
-let authMode: "login" | "register" | "forgot" | "reset" | "verify" = "login";
+let authMode: "login" | "register" | "forgot" | "reset" | "verify" | "resend" = "login";
 let authToken: string | null = null;
 const storedTokens = (): { accessToken: string; refreshToken: string } | null => {
   try {
@@ -99,22 +99,36 @@ function showAuth(message = ""): void {
     authMode === "login"
       ? "Sign in"
       : authMode === "register"
-        ? "Create account"
+        ? "Create"
         : authMode === "forgot"
-          ? "Reset password"
-          : authMode === "verify"
-            ? "Verify email"
-            : "Set a new password";
+          ? "Forgot"
+          : authMode === "resend"
+            ? "Resend"
+            : authMode === "verify"
+              ? "Verify email"
+              : "Reset password";
   authSubmit.textContent =
     authMode === "login"
       ? "Sign in"
       : authMode === "register"
-        ? "Create account"
+        ? "Create"
         : authMode === "forgot"
-          ? "Send reset instructions"
-          : authMode === "verify"
-            ? "Verify email"
-            : "Update password";
+          ? "Send reset link"
+          : authMode === "resend"
+            ? "Resend"
+            : authMode === "verify"
+              ? "Verify email"
+              : "Reset password";
+  authSubmit.className =
+    authMode === "login"
+      ? "auth-signin"
+      : authMode === "register"
+        ? "auth-create"
+        : authMode === "forgot"
+          ? "auth-forgot"
+          : authMode === "resend"
+            ? "auth-resend"
+            : "auth-reset";
   byId<HTMLLabelElement>("auth-token-label").hidden = !needsToken;
   authTokenInput.hidden = !needsToken;
   byId<HTMLLabelElement>("auth-password-label").hidden = !needsPassword;
@@ -482,6 +496,10 @@ resetButton.addEventListener("click", () => {
   }
 });
 
+byId<HTMLButtonElement>("auth-signin").onclick = () => {
+  authMode = "login";
+  showAuth();
+};
 byId<HTMLButtonElement>("auth-register").onclick = () => {
   authMode = "register";
   showAuth();
@@ -490,13 +508,9 @@ byId<HTMLButtonElement>("auth-forgot").onclick = () => {
   authMode = "forgot";
   showAuth();
 };
-byId<HTMLButtonElement>("auth-resend").onclick = async () => {
-  try {
-    await api.resendVerification(authEmail.value);
-    showAuth("Verification email sent.");
-  } catch (e) {
-    showAuth(e instanceof Error ? e.message : "Request failed");
-  }
+byId<HTMLButtonElement>("auth-resend").onclick = () => {
+  authMode = "resend";
+  showAuth();
 };
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
