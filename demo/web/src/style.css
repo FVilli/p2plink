@@ -249,7 +249,7 @@ th {
 }
 .password-field {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 6px;
 }
 .password-field:has(input[hidden]) {
@@ -260,6 +260,10 @@ th {
   min-width: 0;
 }
 .password-field .password-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
   width: auto;
   flex: 0 0 auto;
   padding: 3px;
