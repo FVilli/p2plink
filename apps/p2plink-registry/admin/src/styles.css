@@ -1,3 +1,237 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap');
-*{box-sizing:border-box}body{margin:0;background:#0b1020;color:#e8edff;font:15px 'DM Sans',sans-serif}.shell{max-width:1440px;margin:auto;padding:38px 5vw}header{display:flex;align-items:center;justify-content:space-between;margin-bottom:30px}.brand{color:#54e1cb;font-weight:700;letter-spacing:.1em}h1{font:700 36px 'Space Grotesk';margin:7px 0}h1 em{font-style:normal;color:#ab8cff}header p,.panel>p{color:#8e9ab9;margin:0}.actions{display:flex;gap:10px}.panel,.stat{background:#141b30;border:1px solid #28324d;border-radius:16px;padding:22px}.login{max-width:440px;margin:8vh auto}.login h2,.panel h2{font:700 21px 'Space Grotesk';margin:0 0 15px}.login form{display:grid;gap:15px;margin-top:24px}label{display:grid;gap:7px;color:#aeb9d5;font-size:13px}input,select{width:100%;border:1px solid #33405f;border-radius:9px;padding:12px;background:#0c1326;color:#eff3ff;font:inherit}button{border:0;border-radius:9px;padding:11px 15px;color:#fff;font-weight:700;cursor:pointer}.primary{background:#7155ef}.secondary{background:#293653}.danger,.revoke{background:#c64769}.tiny{background:#315c77;padding:7px 10px;font-size:12px}.tiny:disabled{opacity:.5;cursor:not-allowed}.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:18px}.stat{padding:17px}.stat small{display:block;color:#a6b2cf}.stat strong{display:block;font:700 25px 'Space Grotesk';margin-top:9px}.c1{border-bottom:3px solid #4cd9bb}.c2{border-bottom:3px solid #668cff}.c3{border-bottom:3px solid #ff668b}.c4{border-bottom:3px solid #ba80ff}.c5{border-bottom:3px solid #ffbf5b}.c6{border-bottom:3px solid #51df8e}.columns{display:grid;grid-template-columns:1fr 1.2fr;gap:18px}.tablewrap{overflow-x:auto}table{width:100%;border-collapse:collapse;text-align:left;white-space:nowrap}th{color:#94a1c0;font-size:12px;text-transform:uppercase}td,th{padding:12px 9px;border-bottom:1px solid #28324a}td{font-size:13px}.badge{padding:4px 8px;border-radius:20px;background:#273858;color:#b6d5ff;font-size:11px}.panel h3{margin:24px 0 12px;font:600 16px 'Space Grotesk'}.create{display:grid;grid-template-columns:1fr 1fr;gap:10px}.check{display:flex;align-items:center;gap:7px}.check input{width:auto}.denied{max-width:500px;margin:auto}.error{color:#ff829b;margin-top:15px}button:hover{filter:brightness(1.13)}
-@media(max-width:1050px){.stats{grid-template-columns:repeat(3,1fr)}.columns{grid-template-columns:1fr}}@media(max-width:600px){.shell{padding:24px 16px}header{align-items:flex-start;gap:12px;flex-direction:column}h1{font-size:30px}.stats{grid-template-columns:repeat(2,1fr)}.create{grid-template-columns:1fr}.panel{padding:16px}}
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap");
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #0b1020;
+  color: #e8edff;
+  font:
+    15px "DM Sans",
+    sans-serif;
+}
+.shell {
+  max-width: 1440px;
+  margin: auto;
+  padding: 38px 5vw;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 30px;
+}
+.brand {
+  color: #54e1cb;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+h1 {
+  font: 700 36px "Space Grotesk";
+  margin: 7px 0;
+}
+h1 em {
+  font-style: normal;
+  color: #ab8cff;
+}
+header p,
+.panel > p {
+  color: #8e9ab9;
+  margin: 0;
+}
+.actions {
+  display: flex;
+  gap: 10px;
+}
+.panel,
+.stat {
+  background: #141b30;
+  border: 1px solid #28324d;
+  border-radius: 16px;
+  padding: 22px;
+}
+.login {
+  max-width: 440px;
+  margin: 8vh auto;
+}
+.login h2,
+.panel h2 {
+  font: 700 21px "Space Grotesk";
+  margin: 0 0 15px;
+}
+.login form {
+  display: grid;
+  gap: 15px;
+  margin-top: 24px;
+}
+label {
+  display: grid;
+  gap: 7px;
+  color: #aeb9d5;
+  font-size: 13px;
+}
+input,
+select {
+  width: 100%;
+  border: 1px solid #33405f;
+  border-radius: 9px;
+  padding: 12px;
+  background: #0c1326;
+  color: #eff3ff;
+  font: inherit;
+}
+button {
+  border: 0;
+  border-radius: 9px;
+  padding: 11px 15px;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.primary {
+  background: #7155ef;
+}
+.secondary {
+  background: #293653;
+}
+.danger,
+.revoke {
+  background: #c64769;
+}
+.tiny {
+  background: #315c77;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+.tiny:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.stats {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.stat {
+  padding: 17px;
+}
+.stat small {
+  display: block;
+  color: #a6b2cf;
+}
+.stat strong {
+  display: block;
+  font: 700 25px "Space Grotesk";
+  margin-top: 9px;
+}
+.c1 {
+  border-bottom: 3px solid #4cd9bb;
+}
+.c2 {
+  border-bottom: 3px solid #668cff;
+}
+.c3 {
+  border-bottom: 3px solid #ff668b;
+}
+.c4 {
+  border-bottom: 3px solid #ba80ff;
+}
+.c5 {
+  border-bottom: 3px solid #ffbf5b;
+}
+.c6 {
+  border-bottom: 3px solid #51df8e;
+}
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 18px;
+}
+.tablewrap {
+  overflow-x: auto;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  white-space: nowrap;
+}
+th {
+  color: #94a1c0;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+td,
+th {
+  padding: 12px 9px;
+  border-bottom: 1px solid #28324a;
+}
+td {
+  font-size: 13px;
+}
+.badge {
+  padding: 4px 8px;
+  border-radius: 20px;
+  background: #273858;
+  color: #b6d5ff;
+  font-size: 11px;
+}
+.panel h3 {
+  margin: 24px 0 12px;
+  font: 600 16px "Space Grotesk";
+}
+.create {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.check input {
+  width: auto;
+}
+.denied {
+  max-width: 500px;
+  margin: auto;
+}
+.error {
+  color: #ff829b;
+  margin-top: 15px;
+}
+button:hover {
+  filter: brightness(1.13);
+}
+@media (max-width: 1050px) {
+  .stats {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .columns {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .shell {
+    padding: 24px 16px;
+  }
+  header {
+    align-items: flex-start;
+    gap: 12px;
+    flex-direction: column;
+  }
+  h1 {
+    font-size: 30px;
+  }
+  .stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .create {
+    grid-template-columns: 1fr;
+  }
+  .panel {
+    padding: 16px;
+  }
+}

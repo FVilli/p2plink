@@ -4,7 +4,12 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-async function seedUser(username: string, password: string, role: "USER" | "ADMIN", isAdmin = false): Promise<void> {
+async function seedUser(
+  username: string,
+  password: string,
+  role: "USER" | "ADMIN",
+  isAdmin = false,
+): Promise<void> {
   const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
   await prisma.user.upsert({
     where: { username: username.toLowerCase() },

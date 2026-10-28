@@ -8,7 +8,14 @@ async function seedUser(username: string, password: string, role: UserRole, isAd
   const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
   await prisma.user.upsert({
     where: { username },
-    create: { username, passwordHash, role, isAdmin, status: "ACTIVE", emailVerifiedAt: new Date() },
+    create: {
+      username,
+      passwordHash,
+      role,
+      isAdmin,
+      status: "ACTIVE",
+      emailVerifiedAt: new Date(),
+    },
     update: { isAdmin, status: "ACTIVE", emailVerifiedAt: new Date() },
   });
 }
@@ -18,7 +25,10 @@ async function main() {
   if (!adminPassword) throw new Error("SEED_ADMIN_PASSWORD is required");
   const adminUsername = process.env.SEED_ADMIN_USERNAME ?? "admin";
   await seedUser(adminUsername, adminPassword, UserRole.ADMIN, true);
-  await prisma.user.updateMany({ where: { username: "fvilli@gmail.com" }, data: { isAdmin: true } });
+  await prisma.user.updateMany({
+    where: { username: "fvilli@gmail.com" },
+    data: { isAdmin: true },
+  });
 
   const demoPassword = process.env.SEED_DEMO_PASSWORD;
   if (demoPassword)

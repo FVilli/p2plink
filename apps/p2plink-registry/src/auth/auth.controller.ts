@@ -31,35 +31,43 @@ class TokenDto {
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
   @ApiOperation({ summary: "Register an account" })
-  @Post("register") register(@Body() body: RegisterDto) {
+  @Post("register")
+  register(@Body() body: RegisterDto) {
     return this.auth.register(body.email, body.password);
   }
   @ApiOperation({ summary: "Resend email verification" })
-  @Post("resend-verification") resend(@Body() body: EmailDto) {
+  @Post("resend-verification")
+  resend(@Body() body: EmailDto) {
     return this.auth.resendVerification(body.email);
   }
   @ApiOperation({ summary: "Verify an email address" })
-  @Post("verify-email") verify(@Body() body: VerifyDto) {
+  @Post("verify-email")
+  verify(@Body() body: VerifyDto) {
     return this.auth.verifyEmail(body.email, body.token);
   }
   @ApiOperation({ summary: "Request a password reset" })
-  @Post("password/forgot") forgot(@Body() body: EmailDto) {
+  @Post("password/forgot")
+  forgot(@Body() body: EmailDto) {
     return this.auth.forgotPassword(body.email);
   }
   @ApiOperation({ summary: "Reset a password" })
-  @Post("password/reset") reset(@Body() body: ResetDto) {
+  @Post("password/reset")
+  reset(@Body() body: ResetDto) {
     return this.auth.resetPassword(body.email, body.token, body.newPassword);
   }
   @ApiOperation({ summary: "Log in" })
-  @Post("login") login(@Body() body: LoginDto) {
+  @Post("login")
+  login(@Body() body: LoginDto) {
     return this.auth.login(body.username, body.password);
   }
   @ApiOperation({ summary: "Refresh an access token" })
-  @Post("refresh") refresh(@Body() body: TokenDto) {
+  @Post("refresh")
+  refresh(@Body() body: TokenDto) {
     return this.auth.refresh(body.refreshToken);
   }
   @ApiOperation({ summary: "Log out" })
-  @Post("logout") logout(@Body() body: TokenDto) {
+  @Post("logout")
+  logout(@Body() body: TokenDto) {
     return this.auth.logout(body.refreshToken, body.peerId);
   }
 }

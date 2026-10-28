@@ -8,7 +8,6 @@ import {
   Patch,
   Post,
   UseGuards,
-  Delete,
 } from "@nestjs/common";
 import { IsIn, IsString, MinLength } from "class-validator";
 import { AuthService } from "./auth.service.js";
@@ -54,15 +53,32 @@ export class AdminController {
   @Get("stats")
   async stats() {
     const [users, peers, revoked, grants] = await Promise.all([
-      this.prisma.user.count(), this.prisma.peer.count(),
-      this.prisma.peer.count({ where: { status: "REVOKED" } }), this.prisma.brokerGrant.count(),
+      this.prisma.user.count(),
+      this.prisma.peer.count(),
+      this.prisma.peer.count({ where: { status: "REVOKED" } }),
+      this.prisma.brokerGrant.count(),
     ]);
-    return { users, peers, revoked, grants, brokerHealthy: this.broker.isHealthy(), traffic: { measured: "registry presence only; MQTT byte traffic is not exposed", presence: await this.prisma.peer.count({ where: { status: "ACTIVE" } }) } };
+    return {
+      users,
+      peers,
+      revoked,
+      grants,
+      brokerHealthy: this.broker.isHealthy(),
+      traffic: {
+        measured: "registry presence only; MQTT byte traffic is not exposed",
+        presence: await this.prisma.peer.count({ where: { status: "ACTIVE" } }),
+      },
+    };
   }
 
   @ApiOperation({ summary: "List registry peers" })
   @Get("peers")
-  peers() { return this.prisma.peer.findMany({ include: { user: { select: { username: true } }, grant: true }, orderBy: { createdAt: "desc" } }); }
+  peers() {
+    return this.prisma.peer.findMany({
+      include: { user: { select: { username: true } }, grant: true },
+      orderBy: { createdAt: "desc" },
+    });
+  }
 
   @ApiOperation({ summary: "Revoke a peer" })
   @Patch("peers/:id/revoke")
@@ -71,7 +87,10 @@ export class AdminController {
     if (!peer) throw new ConflictException("Peer not found");
     await this.broker.disablePeer(peer.peerId);
     await this.prisma.peer.update({ where: { id: peer.id }, data: { status: "REVOKED" } });
-    await this.prisma.brokerGrant.updateMany({ where: { peerId: peer.id }, data: { status: "REVOKED" } });
+    await this.prisma.brokerGrant.updateMany({
+      where: { peerId: peer.id },
+      data: { status: "REVOKED" },
+    });
     return { ok: true };
   }
 
@@ -79,7 +98,14 @@ export class AdminController {
   @Get("users")
   users() {
     return this.prisma.user.findMany({
-      select: { id: true, username: true, role: true, isAdmin: true, status: true, createdAt: true },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        isAdmin: true,
+        status: true,
+        createdAt: true,
+      },
       orderBy: { username: "asc" },
     });
   }
@@ -88,8 +114,19 @@ export class AdminController {
   @Post("users")
   async create(@Body() body: CreateUserDto) {
     try {
-      const user = await this.auth.createUser(body.username, body.password, body.role, body.isAdmin);
-      return { id: user.id, username: user.username, role: user.role, isAdmin: user.isAdmin, status: user.status };
+      const user = await this.auth.createUser(
+        body.username,
+        body.password,
+        body.role,
+        body.isAdmin,
+      );
+      return {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        isAdmin: user.isAdmin,
+        status: user.status,
+      };
     } catch (error) {
       throw new ConflictException(
         error instanceof Error && /unique|duplicate/i.test(error.message)

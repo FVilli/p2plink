@@ -215,7 +215,12 @@ export class AuthService {
     return { ok: true };
   }
 
-  async createUser(username: string, password: string, role: "USER" | "ADMIN" = "USER", isAdmin = false) {
+  async createUser(
+    username: string,
+    password: string,
+    role: "USER" | "ADMIN" = "USER",
+    isAdmin = false,
+  ) {
     const normalized = username.trim().toLowerCase();
     const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
     return this.prisma.user.create({
