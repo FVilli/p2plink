@@ -8,13 +8,15 @@ import {
   Patch,
   Post,
   UseGuards,
+  Delete,
 } from "@nestjs/common";
 import { IsIn, IsString, MinLength } from "class-validator";
 import { AuthService } from "./auth.service.js";
 import { JwtAuthGuard } from "./jwt-auth.guard.js";
-import { Roles, RolesGuard } from "./roles.guard.js";
+import { AdminGuard } from "./admin.guard.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { BROKER_ADMIN, type BrokerAdmin } from "../broker/broker-admin.interface.js";
+import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 
 class CreateUserDto {
   @IsString()
@@ -27,6 +29,9 @@ class CreateUserDto {
 
   @IsIn(["USER", "ADMIN"])
   role: "USER" | "ADMIN" = "USER";
+
+  @IsIn([true, false])
+  isAdmin = false;
 }
 
 class StatusDto {
@@ -34,9 +39,10 @@ class StatusDto {
   status!: "ACTIVE" | "DISABLED";
 }
 
+@ApiTags("admin")
+@ApiBearerAuth()
 @Controller("v1/admin")
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles("ADMIN")
+@UseGuards(JwtAuthGuard, AdminGuard)
 export class AdminController {
   constructor(
     private readonly auth: AuthService,
@@ -44,19 +50,46 @@ export class AdminController {
     @Inject(BROKER_ADMIN) private readonly broker: BrokerAdmin,
   ) {}
 
+  @ApiOperation({ summary: "Get registry administration statistics" })
+  @Get("stats")
+  async stats() {
+    const [users, peers, revoked, grants] = await Promise.all([
+      this.prisma.user.count(), this.prisma.peer.count(),
+      this.prisma.peer.count({ where: { status: "REVOKED" } }), this.prisma.brokerGrant.count(),
+    ]);
+    return { users, peers, revoked, grants, brokerHealthy: this.broker.isHealthy(), traffic: { measured: "registry presence only; MQTT byte traffic is not exposed", presence: await this.prisma.peer.count({ where: { status: "ACTIVE" } }) } };
+  }
+
+  @ApiOperation({ summary: "List registry peers" })
+  @Get("peers")
+  peers() { return this.prisma.peer.findMany({ include: { user: { select: { username: true } }, grant: true }, orderBy: { createdAt: "desc" } }); }
+
+  @ApiOperation({ summary: "Revoke a peer" })
+  @Patch("peers/:id/revoke")
+  async revoke(@Param("id") id: string) {
+    const peer = await this.prisma.peer.findFirst({ where: { OR: [{ id }, { peerId: id }] } });
+    if (!peer) throw new ConflictException("Peer not found");
+    await this.broker.disablePeer(peer.peerId);
+    await this.prisma.peer.update({ where: { id: peer.id }, data: { status: "REVOKED" } });
+    await this.prisma.brokerGrant.updateMany({ where: { peerId: peer.id }, data: { status: "REVOKED" } });
+    return { ok: true };
+  }
+
+  @ApiOperation({ summary: "List registry users" })
   @Get("users")
   users() {
     return this.prisma.user.findMany({
-      select: { id: true, username: true, role: true, status: true, createdAt: true },
+      select: { id: true, username: true, role: true, isAdmin: true, status: true, createdAt: true },
       orderBy: { username: "asc" },
     });
   }
 
+  @ApiOperation({ summary: "Create a registry user" })
   @Post("users")
   async create(@Body() body: CreateUserDto) {
     try {
-      const user = await this.auth.createUser(body.username, body.password, body.role);
-      return { id: user.id, username: user.username, role: user.role, status: user.status };
+      const user = await this.auth.createUser(body.username, body.password, body.role, body.isAdmin);
+      return { id: user.id, username: user.username, role: user.role, isAdmin: user.isAdmin, status: user.status };
     } catch (error) {
       throw new ConflictException(
         error instanceof Error && /unique|duplicate/i.test(error.message)
@@ -66,6 +99,7 @@ export class AdminController {
     }
   }
 
+  @ApiOperation({ summary: "Update a user status" })
   @Patch("users/:id/status")
   async status(@Param("id") id: string, @Body() body: StatusDto) {
     const user = await this.auth.setUserStatus(id, body.status);

@@ -2,7 +2,9 @@ import { Controller, Get, Inject } from "@nestjs/common";
 import { config } from "../config.js";
 import { BROKER_ADMIN, type BrokerAdmin } from "../broker/broker-admin.interface.js";
 import { RegistrySignerService } from "./registry-signer.service.js";
+import { ApiTags } from "@nestjs/swagger";
 
+@ApiTags("registry")
 @Controller("v1/registry")
 export class RegistryController {
   constructor(

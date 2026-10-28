@@ -15,33 +15,35 @@
     "db:seed:prod": "node dist/seed.js"
   },
   "dependencies": {
+    "@fastify/static": "^10.1.8",
     "@nestjs/common": "^12.3.2",
     "@nestjs/config": "^12.0.1",
     "@nestjs/core": "^12.3.2",
     "@nestjs/jwt": "^12.0.3",
     "@nestjs/platform-fastify": "^12.3.2",
+    "@nestjs/swagger": "^12.0.5",
     "@p2plink/crypto": "workspace:*",
     "@prisma/client": "^6.19.3",
     "argon2": "^0.45.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "dotenv": "^16.4.7",
     "jose": "^6.2.13",
     "mqtt": "^5.16.1",
+    "nodemailer": "^7.0.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2",
-    "dotenv": "^16.4.7",
-    "nodemailer": "^7.0.0"
+    "rxjs": "^7.8.2"
   },
   "devDependencies": {
     "@nestjs/testing": "^12.3.2",
     "@types/node": "^24.19.2",
+    "@types/nodemailer": "^7.0.0",
     "@types/supertest": "^6.0.3",
     "prisma": "^6.19.3",
     "supertest": "^7.1.4",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
-    "vitest": "^5.0.5",
-    "@types/nodemailer": "^7.0.0"
+    "vitest": "^5.0.5"
   },
   "engines": {
     "node": ">=22"

@@ -27,6 +27,7 @@ import { JwtAuthGuard } from "../auth/jwt-auth.guard.js";
 import { BROKER_ADMIN, type BrokerAdmin } from "../broker/broker-admin.interface.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { REGISTRY_SIGNER, type RegistrySigner } from "../registry/registry-signer.interface.js";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 
 const canonical = (purpose: string, id: string, nonce: string) =>
   `p2plink-registry:${purpose}:${id}:${nonce}`;
@@ -34,6 +35,8 @@ const random = (size = 32) => randomBytes(size).toString("base64url");
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const jsonKey = (v: unknown) => v as JsonWebKey;
 
+@ApiTags("peers")
+@ApiBearerAuth()
 @Controller("v1/peers")
 @UseGuards(JwtAuthGuard)
 export class PeersController {

@@ -1,6 +1,8 @@
 import { Controller, Get } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { ApiTags } from "@nestjs/swagger";
 
+@ApiTags("revocations")
 @Controller("v1/revocations")
 export class RevocationsController {
   constructor(private readonly prisma: PrismaService) {}

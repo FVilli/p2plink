@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "newProjectRoot": "projects",
+  "projects": {
+    "p2plink-admin": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "admin",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {"outputPath": "dist", "index": "src/index.html", "browser": "src/main.ts", "polyfills": ["zone.js"], "tsConfig": "tsconfig.app.json", "baseHref": "/admin/", "styles": ["src/styles.css"]},
+          "configurations": {"production": {"budgets": [{"type": "initial", "maximumWarning": "1mb", "maximumError": "2mb"}], "outputHashing": "all"}, "development": {"optimization": false, "extractLicenses": false, "sourceMap": true}},
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {"production": {"buildTarget": "p2plink-admin:build:production"}, "development": {"buildTarget": "p2plink-admin:build:development"}},
+          "defaultConfiguration": "development"
+        }
+      }
+    }
+  }
+}

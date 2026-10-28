@@ -3,3 +3,4 @@ packages:
   - "examples/*"
   - "examples/*/*"
   - "apps/*"
+  - "apps/p2plink-registry/admin"

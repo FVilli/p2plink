@@ -5,6 +5,7 @@ import { AdminController } from "./admin.controller.js";
 import { AuthService } from "./auth.service.js";
 import { JwtAuthGuard } from "./jwt-auth.guard.js";
 import { RolesGuard } from "./roles.guard.js";
+import { AdminGuard } from "./admin.guard.js";
 import { config } from "../config.js";
 import { BrokerModule } from "../broker/broker.module.js";
 import { MailModule } from "../mail/mail.module.js";
@@ -19,7 +20,7 @@ import { MailModule } from "../mail/mail.module.js";
     }),
   ],
   controllers: [AuthController, AdminController],
-  providers: [AuthService, JwtAuthGuard, RolesGuard],
-  exports: [JwtModule, JwtAuthGuard, RolesGuard],
+  providers: [AuthService, JwtAuthGuard, RolesGuard, AdminGuard],
+  exports: [JwtModule, JwtAuthGuard, RolesGuard, AdminGuard],
 })
 export class AuthModule {}
