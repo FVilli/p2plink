@@ -16,6 +16,7 @@ import { AdminGuard } from "./admin.guard.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { BROKER_ADMIN, type BrokerAdmin } from "../broker/broker-admin.interface.js";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { PresenceService } from "../presence/presence.service.js";
 
 class CreateUserDto {
   @IsString()
@@ -44,6 +45,7 @@ export class AdminController {
     private readonly auth: AuthService,
     private readonly prisma: PrismaService,
     @Inject(BROKER_ADMIN) private readonly broker: BrokerAdmin,
+    private readonly presence: PresenceService,
   ) {}
 
   @ApiOperation({ summary: "Get registry administration statistics" })
@@ -55,15 +57,18 @@ export class AdminController {
       this.prisma.peer.count({ where: { status: "REVOKED" } }),
       this.prisma.brokerGrant.count(),
     ]);
+    const online = this.presence.count();
     return {
       users,
+      online,
+      presence: this.presence.list(),
       peers,
       revoked,
       grants,
       brokerHealthy: this.broker.isHealthy(),
       traffic: {
-        measured: "registry presence only; MQTT byte traffic is not exposed",
-        presence: await this.prisma.peer.count({ where: { status: "ACTIVE" } }),
+        measured: "live MQTT presence; MQTT byte traffic is not exposed",
+        presence: online,
       },
     };
   }

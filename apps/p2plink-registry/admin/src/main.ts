@@ -11,7 +11,16 @@ interface LoginResponse {
   accessToken?: string;
   token?: string;
 }
+interface OnlinePeer {
+  peerId: string;
+  name: string;
+  kind: string;
+  version: string;
+  lastSeen: number;
+}
 interface AdminStats {
+  online: number;
+  presence: OnlinePeer[];
   users: number;
   peers: number;
   revoked: number;
@@ -100,8 +109,34 @@ interface NewUser {
           <small>📡 Broker</small><strong>{{ stats?.brokerHealthy ? "Online" : "Offline" }}</strong>
         </article>
         <article class="stat c6">
-          <small>🟢 Active presence</small><strong>{{ stats?.traffic?.presence ?? "—" }}</strong>
+          <small>🟢 Online now</small><strong>{{ stats?.online ?? "—" }}</strong>
         </article>
+      </section>
+      <section class="panel">
+        <h2>🟢 Online now</h2>
+        <div class="tablewrap" *ngIf="stats?.presence?.length; else noOnline">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Peer ID</th>
+                <th>Kind</th>
+                <th>Version</th>
+                <th>Last seen</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let p of stats.presence">
+                <td>{{ p.name }}</td>
+                <td>{{ p.peerId }}</td>
+                <td>{{ p.kind }}</td>
+                <td>{{ p.version }}</td>
+                <td>{{ p.lastSeen | date: "medium" }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ng-template #noOnline><p>No peers online right now.</p></ng-template>
       </section>
       <div class="columns">
         <section class="panel">

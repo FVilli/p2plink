@@ -9,11 +9,13 @@ import { AdminGuard } from "./admin.guard.js";
 import { config } from "../config.js";
 import { BrokerModule } from "../broker/broker.module.js";
 import { MailModule } from "../mail/mail.module.js";
+import { PresenceModule } from "../presence/presence.module.js";
 
 @Module({
   imports: [
     BrokerModule,
     MailModule,
+    PresenceModule,
     JwtModule.register({
       secret: config.jwtSecret,
       signOptions: { expiresIn: config.accessTtlSeconds },
