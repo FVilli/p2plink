@@ -22,10 +22,10 @@ export class JwtAuthGuard implements CanActivate {
       if (typeof payload.sub !== "string") throw new UnauthorizedException();
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
-        select: { status: true, isAdmin: true },
+        select: { status: true, role: true },
       });
       if (user?.status !== "ACTIVE") throw new UnauthorizedException();
-      req.user = { ...payload, isAdmin: user.isAdmin };
+      req.user = { ...payload, role: user.role };
       return true;
     } catch {
       throw new UnauthorizedException();

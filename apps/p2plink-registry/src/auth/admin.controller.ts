@@ -28,9 +28,6 @@ class CreateUserDto {
 
   @IsIn(["USER", "ADMIN"])
   role: "USER" | "ADMIN" = "USER";
-
-  @IsIn([true, false])
-  isAdmin = false;
 }
 
 class StatusDto {
@@ -102,7 +99,6 @@ export class AdminController {
         id: true,
         username: true,
         role: true,
-        isAdmin: true,
         status: true,
         createdAt: true,
       },
@@ -114,17 +110,11 @@ export class AdminController {
   @Post("users")
   async create(@Body() body: CreateUserDto) {
     try {
-      const user = await this.auth.createUser(
-        body.username,
-        body.password,
-        body.role,
-        body.isAdmin,
-      );
+      const user = await this.auth.createUser(body.username, body.password, body.role);
       return {
         id: user.id,
         username: user.username,
         role: user.role,
-        isAdmin: user.isAdmin,
         status: user.status,
       };
     } catch (error) {

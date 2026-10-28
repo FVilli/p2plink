@@ -23,7 +23,6 @@ interface AdminUser {
   id: string;
   username: string;
   role: string;
-  isAdmin: boolean;
   status: "ACTIVE" | "DISABLED";
 }
 interface AdminPeer {
@@ -38,7 +37,6 @@ interface NewUser {
   username: string;
   password: string;
   role: "USER" | "ADMIN";
-  isAdmin: boolean;
 }
 
 @Component({
@@ -114,7 +112,6 @@ interface NewUser {
                 <tr>
                   <th>Username</th>
                   <th>Role</th>
-                  <th>Admin</th>
                   <th>Status</th>
                   <th></th>
                 </tr>
@@ -123,7 +120,6 @@ interface NewUser {
                 <tr *ngFor="let u of users">
                   <td>{{ u.username }}</td>
                   <td>{{ u.role }}</td>
-                  <td>{{ u.isAdmin ? "Yes" : "No" }}</td>
                   <td>
                     <span class="badge">{{ u.status }}</span>
                   </td>
@@ -154,9 +150,6 @@ interface NewUser {
             /><select name="role" [(ngModel)]="newUser.role">
               <option value="USER">USER</option>
               <option value="ADMIN">ADMIN</option></select
-            ><label class="check"
-              ><input type="checkbox" name="isAdmin" [(ngModel)]="newUser.isAdmin" /> Admin
-              access</label
             ><button class="primary">＋ Create</button>
           </form>
         </section>
@@ -212,7 +205,7 @@ class AdminApp {
   stats?: AdminStats;
   users: AdminUser[] = [];
   peers: AdminPeer[] = [];
-  newUser: NewUser = { username: "", password: "", role: "USER", isAdmin: false };
+  newUser: NewUser = { username: "", password: "", role: "USER" };
   login() {
     this.error = "";
     this.http
@@ -257,7 +250,7 @@ class AdminApp {
       .post("/v1/admin/users", this.newUser, { headers: { Authorization: `Bearer ${this.token}` } })
       .subscribe({
         next: () => {
-          this.newUser = { username: "", password: "", role: "USER", isAdmin: false };
+          this.newUser = { username: "", password: "", role: "USER" };
           this.load();
         },
         error: (e: HttpErrorResponse) => (this.error = this.message(e)),

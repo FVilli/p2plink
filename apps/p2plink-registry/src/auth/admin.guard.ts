@@ -9,7 +9,7 @@ import {
 export class AdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const user = context.switchToHttp().getRequest().user;
-    if (user?.isAdmin !== true) throw new ForbiddenException();
+    if (user?.role !== "ADMIN") throw new ForbiddenException();
     return true;
   }
 }
