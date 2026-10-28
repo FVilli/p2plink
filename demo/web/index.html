@@ -56,12 +56,12 @@
         <form id="auth-form">
           <h2 id="auth-title">Sign in</h2>
           <label>Email</label><input id="auth-email" type="email" autocomplete="email" required />
-          <label>Client name</label
+          <label id="auth-password-label">Password</label
+          ><input id="auth-password" type="password" autocomplete="current-password" required />
+          <label id="auth-friendly-label">Client name</label
           ><input id="auth-friendly" type="text" maxlength="50" placeholder="monster" />
           <label id="auth-token-label" hidden>Email token</label
           ><input id="auth-token" type="text" autocomplete="one-time-code" hidden />
-          <label id="auth-password-label">Password</label
-          ><input id="auth-password" type="password" autocomplete="current-password" required />
           <label id="auth-new-password-label" hidden>New password</label
           ><input id="auth-new-password" type="password" autocomplete="new-password" hidden />
           <p id="auth-error" class="config-error" role="alert"></p>

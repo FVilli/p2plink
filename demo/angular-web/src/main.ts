@@ -103,7 +103,11 @@ class BytesRatePipe implements PipeTransform {
           <h2>{{ authMode() }}</h2>
           <p class="muted">P2PLink Registry account</p>
           <label>Email</label><input name="email" type="email" required [value]="authEmail()" />
-          @if (authMode() !== "Resend") {
+          @if (authMode() === "Login" || authMode() === "Register") {
+            <label>Password (min 12 characters)</label
+            ><input name="password" type="password" minlength="12" required />
+          }
+          @if (authMode() === "Login") {
             <label>Client name</label
             ><input
               name="friendly"
@@ -112,10 +116,6 @@ class BytesRatePipe implements PipeTransform {
               placeholder="monster"
               [value]="friendly()"
             />
-          }
-          @if (authMode() === "Login" || authMode() === "Register") {
-            <label>Password (min 12 characters)</label
-            ><input name="password" type="password" minlength="12" required />
           }
           @if (authMode() === "Verify email" || authMode() === "Reset password") {
             <label>Token</label><input name="token" required [value]="authToken()" />
@@ -372,10 +372,10 @@ class App {
       email = String(d.get("email")),
       password = String(d.get("password") ?? ""),
       token = String(d.get("token") ?? ""),
-      friendly = String(d.get("friendly") ?? "").trim();
+      friendly = this.authMode() === "Login" ? String(d.get("friendly") ?? "").trim() : this.friendly();
     this.authEmail.set(email);
     this.friendly.set(friendly || this.friendly());
-    localStorage.setItem(FRIENDLY_KEY, this.friendly());
+    if (this.authMode() === "Login") localStorage.setItem(FRIENDLY_KEY, this.friendly());
     this.authError.set("");
     const api = new RegistryApi(this.registryUrl);
     try {

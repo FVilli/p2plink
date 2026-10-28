@@ -228,9 +228,11 @@ export default function App() {
       email = String(d.get("email") || "").trim(),
       password = String(d.get("password") || ""),
       token = String(d.get("token") || ""),
-      requestedName = String(d.get("friendly") || "").trim();
-    setFriendly(requestedName);
-    localStorage.setItem("p2plink-friendly-name", requestedName);
+      requestedName = authMode === "login" ? String(d.get("friendly") || "").trim() : friendly;
+    if (authMode === "login") {
+      setFriendly(requestedName);
+      localStorage.setItem("p2plink-friendly-name", requestedName || defaultName);
+    }
     const api = new RegistryApi(registryUrl);
     try {
       if (authMode === "resend") {
@@ -453,19 +455,6 @@ export default function App() {
                 ) : null}
                 {authMode === "login" ||
                 authMode === "register" ||
-                authMode === "verify-email" ||
-                authMode === "reset-password" ? (
-                  <input
-                    name="friendly"
-                    type="text"
-                    maxLength={50}
-                    placeholder="Client name (e.g. monster)"
-                    value={friendly}
-                    onChange={(e) => setFriendly(e.target.value)}
-                  />
-                ) : null}
-                {authMode === "login" ||
-                authMode === "register" ||
                 authMode === "reset-password" ? (
                   <input
                     name="password"
@@ -475,6 +464,16 @@ export default function App() {
                     placeholder={
                       authMode === "reset-password" ? "New password (min 12)" : "Password (min 12)"
                     }
+                  />
+                ) : null}
+                {authMode === "login" ? (
+                  <input
+                    name="friendly"
+                    type="text"
+                    maxLength={50}
+                    placeholder="Client name (e.g. monster)"
+                    value={friendly}
+                    onChange={(e) => setFriendly(e.target.value)}
                   />
                 ) : null}
                 <button

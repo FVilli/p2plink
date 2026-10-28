@@ -129,6 +129,8 @@ function showAuth(message = ""): void {
           : authMode === "resend"
             ? "auth-resend"
             : "auth-reset";
+  byId<HTMLLabelElement>("auth-friendly-label").hidden = authMode !== "login";
+  authFriendly.hidden = authMode !== "login";
   byId<HTMLLabelElement>("auth-token-label").hidden = !needsToken;
   authTokenInput.hidden = !needsToken;
   byId<HTMLLabelElement>("auth-password-label").hidden = !needsPassword;
@@ -515,7 +517,9 @@ byId<HTMLButtonElement>("auth-resend").onclick = () => {
 authForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   authError.textContent = "";
-  localStorage.setItem(FRIENDLY_KEY, authFriendly.value.trim() || defaultName);
+  if (authMode === "login") {
+    localStorage.setItem(FRIENDLY_KEY, authFriendly.value.trim() || defaultName);
+  }
   try {
     if (authMode === "register") {
       await api.register(authEmail.value, authPassword.value);
@@ -538,7 +542,6 @@ authForm.addEventListener("submit", async (event) => {
       return;
     }
     if (authMode === "verify") {
-      localStorage.setItem(FRIENDLY_KEY, authFriendly.value.trim() || defaultName);
       const verified = await api.verifyEmail(authEmail.value, authTokenInput.value.trim());
       localStorage.setItem(TOKENS_KEY, JSON.stringify(verified));
       authToken = verified.accessToken;
