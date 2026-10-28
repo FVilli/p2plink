@@ -627,16 +627,18 @@ class MeshImpl implements MeshPeer {
     if (typeof message !== "object" || message === null) return;
     const handshake = message as Partial<HandshakeMessage>;
     if (handshake.v !== 1 || handshake.type !== "handshake") return;
+    const helloKind =
+      typeof handshake.hello === "object" && handshake.hello !== null
+        ? (handshake.hello as { kind?: unknown }).kind
+        : null;
     let pair = this.pairs.get(from);
+    if (pair?.isClosed) {
+      this.pairs.delete(from);
+      pair = undefined;
+    }
     if (!pair) {
-      const helloKind =
-        typeof handshake.hello === "object" && handshake.hello !== null
-          ? (handshake.hello as { kind?: unknown }).kind
-          : null;
       const expectedRole = this.peerId < from ? "initiator" : "responder";
-      if (helloKind !== "client-hello" || expectedRole !== "responder") {
-        return;
-      }
+      if (helloKind !== "client-hello" || expectedRole !== "responder") return;
       pair = this.createPair(peer, "responder");
     }
     void pair.handleHandshake(message);

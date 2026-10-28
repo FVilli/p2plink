@@ -101,6 +101,8 @@ export class PairSession {
   private handshakeTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private webrtcTimer: ReturnType<typeof setTimeout> | null = null;
+  private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+  private recovering = false;
   private epoch = 0;
   private route: PeerRoute = "connecting";
   private readonly meter = new RateMeter();
@@ -325,6 +327,11 @@ export class PairSession {
           : snapshot.transport === "mqtt"
             ? "mqtt"
             : "connecting";
+      if (snapshot.transport === null && this.ready && this.role === "initiator") {
+        this.scheduleRecovery();
+      } else if (snapshot.transport !== null) {
+        this.clearTimer("recovery");
+      }
       this.ctx.onChange();
     });
     manager.start();
@@ -340,7 +347,8 @@ export class PairSession {
         peerId: this.remote.peerId,
         error: this.lastError,
       });
-      this.close("transport not ready");
+      if (this.role === "initiator") this.scheduleRecovery();
+      else this.close("transport not ready");
       return;
     }
     if (this.closed) return;
@@ -700,6 +708,7 @@ export class PairSession {
   }
 
   private async resetSession(): Promise<void> {
+    this.clearTimer("recovery");
     this.ready = false;
     this.lastServerHello = null;
     this.clientState = null;
@@ -727,6 +736,7 @@ export class PairSession {
     this.clearTimer("handshake");
     this.clearTimer("retry");
     this.clearTimer("webrtc");
+    this.clearTimer("recovery");
     if (this.inFlight) {
       clearTimeout(this.inFlight.timer);
       this.inFlight = null;
@@ -741,6 +751,26 @@ export class PairSession {
     this.pendingSignals.length = 0;
     this.ctx.logger.debug("pair closed", { peerId: this.remote.peerId, reason });
     this.ctx.onChange();
+  }
+
+  private scheduleRecovery(): void {
+    if (this.closed || this.recoveryTimer || this.recovering) return;
+    this.recoveryTimer = setTimeout(() => {
+      this.recoveryTimer = null;
+      void this.recoverSession();
+    }, HANDSHAKE_RETRY_MS);
+    this.recoveryTimer.unref?.();
+  }
+
+  private async recoverSession(): Promise<void> {
+    if (this.closed || this.role !== "initiator" || this.recovering) return;
+    this.recovering = true;
+    try {
+      await this.resetSession();
+      if (!this.closed) this.startHandshake();
+    } finally {
+      this.recovering = false;
+    }
   }
 
   private failHandshake(message: string): void {
@@ -765,7 +795,7 @@ export class PairSession {
     }
   }
 
-  private clearTimer(kind: "handshake" | "retry" | "webrtc"): void {
+  private clearTimer(kind: "handshake" | "retry" | "webrtc" | "recovery"): void {
     if (kind === "handshake" && this.handshakeTimer) {
       clearTimeout(this.handshakeTimer);
       this.handshakeTimer = null;
@@ -775,6 +805,9 @@ export class PairSession {
     } else if (kind === "webrtc" && this.webrtcTimer) {
       clearTimeout(this.webrtcTimer);
       this.webrtcTimer = null;
+    } else if (kind === "recovery" && this.recoveryTimer) {
+      clearTimeout(this.recoveryTimer);
+      this.recoveryTimer = null;
     }
   }
 }
