@@ -32,9 +32,14 @@ There is **no public self-registration**.
 Authentication:
 
 ```text
-POST /v1/auth/login      { username, password }
-POST /v1/auth/refresh    { refreshToken }
-POST /v1/auth/logout     { refreshToken }
+POST /v1/auth/register              { email, password }
+POST /v1/auth/resend-verification   { email }
+POST /v1/auth/verify-email          { email, token }
+POST /v1/auth/password/forgot       { email }
+POST /v1/auth/password/reset        { email, token, newPassword }
+POST /v1/auth/login                 { username, password }
+POST /v1/auth/refresh               { refreshToken }
+POST /v1/auth/logout                { refreshToken, peerId? }
 ```
 
 Protected peer lifecycle:
@@ -70,7 +75,7 @@ POST  /v1/admin/users                 { username, password, role }
 PATCH /v1/admin/users/:id/status      { status: "ACTIVE" | "DISABLED" }
 ```
 
-Passwords are hashed with Argon2id. Access tokens are short-lived JWTs; refresh tokens are opaque, hashed in PostgreSQL and rotated on refresh.
+Passwords are hashed with Argon2id. Access tokens are short-lived JWTs; refresh tokens are opaque, hashed in PostgreSQL and rotated on refresh. Registration and forgot-password responses are generic to avoid account enumeration. `logout` deletes the peer MQTT client when `peerId` is supplied; the browser then clears its local storage.
 
 ### Challenge proof
 
@@ -84,6 +89,8 @@ p2plink-registry:credentials:<challengeId>:<nonce>
 The signature is base64url ECDSA/SHA-256 using the peer key. Challenges are single-use, expire after `CHALLENGE_TTL_SECONDS` and are consumed atomically.
 
 ## Peer certificate
+
+The Registry sends verification/reset links through SMTP to the configured `SMTP_*` mailbox. The link points to `PUBLIC_APP_URL` with `auth=verify-email` or `auth=reset-password` plus email/token query parameters.
 
 The registry signs an ES256 JWS with `typ: p2plink-peer-cert` and claims:
 
