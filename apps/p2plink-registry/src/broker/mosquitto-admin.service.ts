@@ -90,7 +90,7 @@ export class MosquittoAdminService implements BrokerAdmin, OnModuleInit, OnModul
     try {
       await this.command({ command: "createRole", rolename: config.mqttPeerRole });
     } catch (error) {
-      if (!this.alreadyExists(error)) return;
+      if (!this.alreadyExists(error)) throw error;
     }
     const prefix = config.meshTopicPrefix.replace(/\/$/u, "");
     const rules: Array<[string, string]> = [
@@ -100,6 +100,8 @@ export class MosquittoAdminService implements BrokerAdmin, OnModuleInit, OnModul
       ["subscribePattern", `${prefix}/signal/%u/+`],
       ["publishClientSend", `${prefix}/data/+/%u`],
       ["subscribePattern", `${prefix}/data/%u/+`],
+      ["publishClientSend", `${prefix}/issues/%u`],
+      ["subscribePattern", `${prefix}/issues/+`],
       ["subscribePattern", config.mqttRevocationTopic],
     ];
     for (const [acltype, topic] of rules) {
