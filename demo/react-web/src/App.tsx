@@ -481,35 +481,40 @@ export default function App() {
                 authMode === "register" ||
                 authMode === "reset-password" ? (
                   <>
-                    <input
-                      name={authMode === "reset-password" ? "newPassword" : "password"}
-                      type={passwordVisible.password ? "text" : "password"}
-                      required
-                      minLength={authMode === "login" ? 1 : 8}
-                      placeholder={
-                        authMode === "reset-password" ? "New password (min 8)" : "Password (min 8)"
-                      }
-                    />
-                    <button
+                    <div className="password-field">
+                      <input
+                        name={authMode === "reset-password" ? "newPassword" : "password"}
+                        type={passwordVisible.password ? "text" : "password"}
+                        required
+                        minLength={authMode === "login" ? 1 : 8}
+                        placeholder={
+                          authMode === "reset-password" ? "New password (min 8)" : "Password (min 8)"
+                        }
+                      />
+                      <button
+                        className="password-toggle"
                       type="button"
                       title={passwordVisible.password ? "Hide password" : "Show password"}
                       aria-label={passwordVisible.password ? "Hide password" : "Show password"}
                       onClick={() => setPasswordVisible((v) => ({ ...v, password: !v.password }))}
                     >
                       👁️
-                    </button>
+                      </button>
+                    </div>
                   </>
                 ) : null}
                 {authMode === "register" ? (
                   <>
-                    <input
-                      name="confirmPassword"
-                      type={passwordVisible.confirm ? "text" : "password"}
-                      required
-                      minLength={8}
-                      placeholder="Confirm password"
-                    />
-                    <button
+                    <div className="password-field">
+                      <input
+                        name="confirmPassword"
+                        type={passwordVisible.confirm ? "text" : "password"}
+                        required
+                        minLength={8}
+                        placeholder="Confirm password"
+                      />
+                      <button
+                        className="password-toggle"
                       type="button"
                       title={
                         passwordVisible.confirm ? "Hide confirm password" : "Show confirm password"
@@ -520,19 +525,22 @@ export default function App() {
                       onClick={() => setPasswordVisible((v) => ({ ...v, confirm: !v.confirm }))}
                     >
                       👁️
-                    </button>
+                      </button>
+                    </div>
                   </>
                 ) : null}
                 {authMode === "reset-password" ? (
                   <>
-                    <input
-                      name="confirmNewPassword"
-                      type={passwordVisible.confirmNew ? "text" : "password"}
-                      required
-                      minLength={8}
-                      placeholder="Confirm new password"
-                    />
-                    <button
+                    <div className="password-field">
+                      <input
+                        name="confirmNewPassword"
+                        type={passwordVisible.confirmNew ? "text" : "password"}
+                        required
+                        minLength={8}
+                        placeholder="Confirm new password"
+                      />
+                      <button
+                        className="password-toggle"
                       type="button"
                       title={
                         passwordVisible.confirmNew
@@ -549,7 +557,8 @@ export default function App() {
                       }
                     >
                       👁️
-                    </button>
+                      </button>
+                    </div>
                   </>
                 ) : null}
                 {authMode === "login" ? (

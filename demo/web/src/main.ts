@@ -163,7 +163,7 @@ function wirePasswordToggle(buttonId: string, input: HTMLInputElement, label: st
   const update = () => {
     const visible = input.type === "text";
     const action = visible ? "Hide" : "Show";
-    button.textContent = action;
+    button.textContent = "👁️";
     button.title = `${action} ${label}`;
     button.setAttribute("aria-label", `${action} ${label}`);
   };

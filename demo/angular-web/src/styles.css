@@ -220,6 +220,29 @@ th {
   background: #0f1622;
   color: #e8edf5;
 }
+.password-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.password-field input {
+  flex: 1;
+  min-width: 0;
+}
+.password-field .password-toggle {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 3px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 18px;
+  line-height: 1;
+}
+.password-field .password-toggle:hover:not(:disabled) {
+  background: transparent;
+}
 .config-error {
   color: #ff9c9c;
   margin: 0;

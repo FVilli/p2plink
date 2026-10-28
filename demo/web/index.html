@@ -65,69 +65,81 @@
           <h2 id="auth-title">Sign in</h2>
           <label>Email</label><input id="auth-email" type="email" autocomplete="email" required />
           <label id="auth-password-label">Password</label
-          ><input
-            id="auth-password"
-            type="password"
-            autocomplete="current-password"
-            required
-            minlength="1"
-          />
-          <button
-            id="auth-password-toggle"
-            type="button"
-            title="Show password"
-            aria-label="Show password"
-          >
-            Show
-          </button>
+          ><div class="password-field">
+            <input
+              id="auth-password"
+              type="password"
+              autocomplete="current-password"
+              required
+              minlength="1"
+            />
+            <button
+              id="auth-password-toggle"
+              class="password-toggle"
+              type="button"
+              title="Show password"
+              aria-label="Show password"
+            >
+              👁️
+            </button>
+          </div>
           <label id="auth-confirm-password-label" hidden>Confirm password</label
-          ><input
+          ><div class="password-field">
+            <input
             id="auth-confirm-password"
             type="password"
             autocomplete="new-password"
             minlength="8"
             hidden
           />
-          <button
+            <button
             id="auth-confirm-password-toggle"
+            class="password-toggle"
             type="button"
             title="Show confirm password"
             aria-label="Show confirm password"
             hidden
           >
-            Show
+              👁️
           </button>
+          </div>
           <label id="auth-friendly-label">Client name</label
           ><input id="auth-friendly" type="text" maxlength="50" placeholder="monster" />
           <label id="auth-token-label" hidden>Email token</label
           ><input id="auth-token" type="text" autocomplete="one-time-code" hidden />
           <label id="auth-new-password-label" hidden>New password</label
-          ><input id="auth-new-password" type="password" autocomplete="new-password" hidden />
-          <button
-            id="auth-new-password-toggle"
-            type="button"
-            title="Show new password"
-            aria-label="Show new password"
-            hidden
-          >
-            Show
-          </button>
+          ><div class="password-field">
+            <input id="auth-new-password" type="password" autocomplete="new-password" hidden />
+            <button
+              id="auth-new-password-toggle"
+              class="password-toggle"
+              type="button"
+              title="Show new password"
+              aria-label="Show new password"
+              hidden
+            >
+              👁️
+            </button>
+          </div>
           <label id="auth-confirm-new-password-label" hidden>Confirm new password</label
-          ><input
+          ><div class="password-field">
+            <input
             id="auth-confirm-new-password"
             type="password"
             autocomplete="new-password"
             hidden
           />
-          <button
+            <button
             id="auth-confirm-new-password-toggle"
+            class="password-toggle"
             type="button"
             title="Show confirm password"
             aria-label="Show confirm password"
             hidden
           >
-            Show
+              👁️
           </button>
+          </div>
           <p id="auth-error" class="config-error" role="alert"></p>
           <button id="auth-submit" type="submit">Continue</button>
         </form>

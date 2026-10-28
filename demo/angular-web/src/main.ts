@@ -123,36 +123,42 @@ class BytesRatePipe implements PipeTransform {
           <label>Email</label><input name="email" type="email" required [value]="authEmail()" />
           @if (authMode() === "Login" || authMode() === "Register") {
             <label>Password</label
-            ><input
-              name="password"
-              [type]="passwordVisible() ? 'text' : 'password'"
-              [attr.minlength]="authMode() === 'Login' ? 1 : 8"
-              required
-            /><button
-              type="button"
-              [attr.title]="passwordVisible() ? 'Hide password' : 'Show password'"
-              [attr.aria-label]="passwordVisible() ? 'Hide password' : 'Show password'"
-              (click)="togglePassword()"
-            >
-              👁️
-            </button>
-            @if (authMode() === "Register") {
-              <label>Confirm password</label
-              ><input
-                name="confirmPassword"
-                [type]="confirmVisible() ? 'text' : 'password'"
-                minlength="8"
+            ><div class="password-field">
+              <input
+                name="password"
+                [type]="passwordVisible() ? 'text' : 'password'"
+                [attr.minlength]="authMode() === 'Login' ? 1 : 8"
                 required
               /><button
+                class="password-toggle"
                 type="button"
-                [attr.title]="confirmVisible() ? 'Hide confirm password' : 'Show confirm password'"
-                [attr.aria-label]="
-                  confirmVisible() ? 'Hide confirm password' : 'Show confirm password'
-                "
-                (click)="toggleConfirm()"
+                [attr.title]="passwordVisible() ? 'Hide password' : 'Show password'"
+                [attr.aria-label]="passwordVisible() ? 'Hide password' : 'Show password'"
+                (click)="togglePassword()"
               >
                 👁️
               </button>
+            </div>
+            @if (authMode() === "Register") {
+              <label>Confirm password</label
+              ><div class="password-field">
+                <input
+                  name="confirmPassword"
+                  [type]="confirmVisible() ? 'text' : 'password'"
+                  minlength="8"
+                  required
+                /><button
+                  class="password-toggle"
+                  type="button"
+                  [attr.title]="confirmVisible() ? 'Hide confirm password' : 'Show confirm password'"
+                  [attr.aria-label]="
+                    confirmVisible() ? 'Hide confirm password' : 'Show confirm password'
+                  "
+                  (click)="toggleConfirm()"
+                >
+                  👁️
+                </button>
+              </div>
             }
           }
           @if (authMode() === "Login") {
@@ -170,37 +176,43 @@ class BytesRatePipe implements PipeTransform {
           }
           @if (authMode() === "Reset password") {
             <label>New password</label
-            ><input
-              name="newPassword"
-              [type]="passwordVisible() ? 'text' : 'password'"
-              minlength="8"
-              required
-            /><button
-              type="button"
-              [attr.title]="passwordVisible() ? 'Hide new password' : 'Show new password'"
-              [attr.aria-label]="passwordVisible() ? 'Hide new password' : 'Show new password'"
-              (click)="togglePassword()"
-            >
-              👁️
-            </button>
-            <label>Confirm new password</label
-            ><input
-              name="confirmNewPassword"
-              [type]="confirmVisible() ? 'text' : 'password'"
-              minlength="8"
-              required
-            /><button
-              type="button"
-              [attr.title]="
-                confirmVisible() ? 'Hide confirm new password' : 'Show confirm new password'
-              "
-              [attr.aria-label]="
-                confirmVisible() ? 'Hide confirm new password' : 'Show confirm new password'
-              "
-              (click)="toggleConfirm()"
-            >
-              👁️
-            </button>
+            ><div class="password-field">
+              <input
+                name="newPassword"
+                [type]="passwordVisible() ? 'text' : 'password'"
+                minlength="8"
+                required
+              /><button
+                class="password-toggle"
+                type="button"
+                [attr.title]="passwordVisible() ? 'Hide new password' : 'Show new password'"
+                [attr.aria-label]="passwordVisible() ? 'Hide new password' : 'Show new password'"
+                (click)="togglePassword()"
+              >
+                👁️
+              </button>
+            </div>
+            <label>Confirm new password</label>
+            ><div class="password-field">
+              <input
+                name="confirmNewPassword"
+                [type]="confirmVisible() ? 'text' : 'password'"
+                minlength="8"
+                required
+              /><button
+                class="password-toggle"
+                type="button"
+                [attr.title]="
+                  confirmVisible() ? 'Hide confirm new password' : 'Show confirm new password'
+                "
+                [attr.aria-label]="
+                  confirmVisible() ? 'Hide confirm new password' : 'Show confirm new password'
+                "
+                (click)="toggleConfirm()"
+              >
+                👁️
+              </button>
+            </div>
           }
           <p class="config-error">{{ authError() }}</p>
           <button [class]="authSubmitClass()">
