@@ -54,26 +54,30 @@
       </section>
       <section id="auth-panel" class="config" hidden>
         <form id="auth-form">
+          <div class="auth-modes">
+            <button id="auth-signin" class="auth-mode auth-signin" type="button">🔑 Sign in</button>
+            <button id="auth-register" class="auth-mode auth-create" type="button">✨ Create</button>
+            <button id="auth-forgot" class="auth-mode auth-forgot" type="button">🔐 Forgot</button>
+            <button id="auth-resend" class="auth-mode auth-resend" type="button">📨 Resend</button>
+          </div>
           <h2 id="auth-title">Sign in</h2>
           <label>Email</label><input id="auth-email" type="email" autocomplete="email" required />
           <label id="auth-password-label">Password</label
-          ><input id="auth-password" type="password" autocomplete="current-password" required />
+          ><input id="auth-password" type="password" autocomplete="current-password" required minlength="1" />
+          <button id="auth-password-toggle" type="button" title="Show password" aria-label="Show password">Show</button>
+          <label id="auth-confirm-password-label" hidden>Confirm password</label><input id="auth-confirm-password" type="password" autocomplete="new-password" minlength="8" hidden />
+          <button id="auth-confirm-password-toggle" type="button" title="Show confirm password" aria-label="Show confirm password" hidden>Show</button>
           <label id="auth-friendly-label">Client name</label
           ><input id="auth-friendly" type="text" maxlength="50" placeholder="monster" />
           <label id="auth-token-label" hidden>Email token</label
           ><input id="auth-token" type="text" autocomplete="one-time-code" hidden />
           <label id="auth-new-password-label" hidden>New password</label
           ><input id="auth-new-password" type="password" autocomplete="new-password" hidden />
+          <button id="auth-new-password-toggle" type="button" title="Show new password" aria-label="Show new password" hidden>Show</button>
+          <label id="auth-confirm-new-password-label" hidden>Confirm new password</label><input id="auth-confirm-new-password" type="password" autocomplete="new-password" hidden />
+          <button id="auth-confirm-new-password-toggle" type="button" title="Show confirm password" aria-label="Show confirm password" hidden>Show</button>
           <p id="auth-error" class="config-error" role="alert"></p>
           <button id="auth-submit" type="submit">Continue</button>
-          <div class="auth-modes">
-            <button id="auth-signin" class="auth-mode auth-signin" type="button">🔑 Sign in</button>
-            <button id="auth-register" class="auth-mode auth-create" type="button">
-              ✨ Create
-            </button>
-            <button id="auth-forgot" class="auth-mode auth-forgot" type="button">🔐 Forgot</button>
-            <button id="auth-resend" class="auth-mode auth-resend" type="button">📨 Resend</button>
-          </div>
         </form>
       </section>
 

@@ -197,6 +197,9 @@ th {
   gap: 10px;
   max-width: 520px;
 }
+#auth-panel { max-width: 600px; margin-left: auto; margin-right: auto; }
+#auth-form { margin: 0 auto; }
+.auth-modes { justify-content: center; margin: 0 auto 10px; }
 .password-row {
   display: flex;
   gap: 10px;

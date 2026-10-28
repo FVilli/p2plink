@@ -74,6 +74,7 @@ const issueContext = (extra: Record<string, string | number | boolean> = {}) => 
   ...extra,
 });
 export default function App() {
+  const [passwordVisible, setPasswordVisible] = useState<Record<string, boolean>>({});
   const [snapshot, setSnapshot] = useState<MeshSnapshot | null>(null);
   const [tokens, setTokens] = useState<RegistryTokens | null>(() => {
     const accessToken = localStorage.getItem(ACCESS_KEY),
@@ -226,7 +227,7 @@ export default function App() {
     setAuthMessage("");
     const d = new FormData(e.currentTarget),
       email = String(d.get("email") || "").trim(),
-      password = String(d.get("password") || ""),
+      password = String(d.get(authMode === "reset-password" ? "newPassword" : "password") || ""),
       token = String(d.get("token") || ""),
       requestedName = authMode === "login" ? String(d.get("friendly") || "").trim() : friendly;
     if (authMode === "login") {
@@ -239,6 +240,7 @@ export default function App() {
         await api.resendVerification(email);
         setAuthMessage("Verification email sent.");
       } else if (authMode === "register") {
+        if (password !== String(d.get("confirmPassword") || "")) throw new Error("Passwords do not match.");
         await api.register(email, password);
         setAuthMessage("Registration complete. Check your email to verify your account.");
         setAuthMode("login");
@@ -249,6 +251,7 @@ export default function App() {
         const result = await api.verifyEmail(email, token);
         await acceptTokens(result, requestedName);
       } else if (authMode === "reset-password") {
+        if (password !== String(d.get("confirmNewPassword") || "")) throw new Error("Passwords do not match.");
         await api.resetPassword(email, token, password);
         setAuthMessage("Password updated. Please log in.");
         setAuthMode("login");
@@ -418,6 +421,9 @@ export default function App() {
                       : authenticate
                 }
               >
+                <div className="auth-modes">
+                  {([['login', '🔑 Sign in', 'auth-signin'], ['register', '✨ Create', 'auth-create'], ['forgot', '🔐 Forgot', 'auth-forgot'], ['resend', '📨 Resend', 'auth-resend']] as const).map(([mode, label, color]) => <button key={mode} className={`auth-mode ${color}`} type="button" onClick={() => setAuthMode(mode)}>{label}</button>)}
+                </div>
                 <h2>
                   Registry{" "}
                   {authMode === "register"
@@ -456,16 +462,19 @@ export default function App() {
                 {authMode === "login" ||
                 authMode === "register" ||
                 authMode === "reset-password" ? (
-                  <input
-                    name="password"
-                    type="password"
-                    required
-                    minLength={authMode === "login" ? 1 : 12}
-                    placeholder={
-                      authMode === "reset-password" ? "New password (min 12)" : "Password (min 12)"
-                    }
-                  />
+                  <>
+                    <input
+                      name={authMode === "reset-password" ? "newPassword" : "password"}
+                      type={passwordVisible.password ? "text" : "password"}
+                      required
+                      minLength={authMode === "login" ? 1 : 8}
+                      placeholder={authMode === "reset-password" ? "New password (min 8)" : "Password (min 8)"}
+                    />
+                    <button type="button" title={passwordVisible.password ? "Hide password" : "Show password"} aria-label={passwordVisible.password ? "Hide password" : "Show password"} onClick={() => setPasswordVisible(v => ({ ...v, password: !v.password }))}>👁️</button>
+                  </>
                 ) : null}
+                {authMode === "register" ? <><input name="confirmPassword" type={passwordVisible.confirm ? "text" : "password"} required minLength={8} placeholder="Confirm password" /><button type="button" title={passwordVisible.confirm ? "Hide confirm password" : "Show confirm password"} aria-label={passwordVisible.confirm ? "Hide confirm password" : "Show confirm password"} onClick={() => setPasswordVisible(v => ({ ...v, confirm: !v.confirm }))}>👁️</button></> : null}
+                {authMode === "reset-password" ? <><input name="confirmNewPassword" type={passwordVisible.confirmNew ? "text" : "password"} required minLength={8} placeholder="Confirm new password" /><button type="button" title={passwordVisible.confirmNew ? "Hide confirm new password" : "Show confirm new password"} aria-label={passwordVisible.confirmNew ? "Hide confirm new password" : "Show confirm new password"} onClick={() => setPasswordVisible(v => ({ ...v, confirmNew: !v.confirmNew }))}>👁️</button></> : null}
                 {authMode === "login" ? (
                   <input
                     name="friendly"
@@ -506,36 +515,6 @@ export default function App() {
                   {error}
                 </p>
                 <p className="muted">{authMessage}</p>
-                <div className="auth-modes">
-                  <button
-                    className="auth-mode auth-signin"
-                    type="button"
-                    onClick={() => setAuthMode("login")}
-                  >
-                    🔑 Sign in
-                  </button>
-                  <button
-                    className="auth-mode auth-create"
-                    type="button"
-                    onClick={() => setAuthMode("register")}
-                  >
-                    ✨ Create
-                  </button>
-                  <button
-                    className="auth-mode auth-forgot"
-                    type="button"
-                    onClick={() => setAuthMode("forgot")}
-                  >
-                    🔐 Forgot
-                  </button>
-                  <button
-                    className="auth-mode auth-resend"
-                    type="button"
-                    onClick={() => setAuthMode("resend")}
-                  >
-                    📨 Resend
-                  </button>
-                </div>
               </form>
             </section>
           )}

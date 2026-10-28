@@ -411,7 +411,7 @@ try {
     throw new Error("offline banner not visible after offline reload");
   }
   const pwaVersion = await pwaPage.locator("#app-version").innerText();
-  if (pwaVersion !== "v0.2.2") throw new Error(`unexpected app version: ${pwaVersion}`);
+  if (pwaVersion !== "v0.2.3") throw new Error(`unexpected app version: ${pwaVersion}`);
   await pwaContext.close();
   console.log("9. PWA opens offline from service worker cache and shows offline banner/version");
 

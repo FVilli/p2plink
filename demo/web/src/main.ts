@@ -88,6 +88,8 @@ const storedTokens = (): { accessToken: string; refreshToken: string } | null =>
 const authTitle = byId<HTMLHeadingElement>("auth-title");
 const authTokenInput = byId<HTMLInputElement>("auth-token");
 const authNewPassword = byId<HTMLInputElement>("auth-new-password");
+const authConfirmPassword = byId<HTMLInputElement>("auth-confirm-password");
+const authConfirmNewPassword = byId<HTMLInputElement>("auth-confirm-new-password");
 const authSubmit = byId<HTMLButtonElement>("auth-submit");
 function showAuth(message = ""): void {
   authPanel.hidden = false;
@@ -95,6 +97,14 @@ function showAuth(message = ""): void {
   const needsToken = authMode === "reset" || authMode === "verify";
   const needsPassword = authMode === "login" || authMode === "register";
   const needsNewPassword = authMode === "reset";
+  byId<HTMLLabelElement>("auth-confirm-password-label").hidden = authMode !== "register";
+  authConfirmPassword.hidden = authMode !== "register";
+  byId<HTMLButtonElement>("auth-password-toggle").hidden = !needsPassword;
+  byId<HTMLButtonElement>("auth-confirm-password-toggle").hidden = authMode !== "register";
+  byId<HTMLLabelElement>("auth-confirm-new-password-label").hidden = !needsNewPassword;
+  authConfirmNewPassword.hidden = !needsNewPassword;
+  byId<HTMLButtonElement>("auth-new-password-toggle").hidden = !needsNewPassword;
+  byId<HTMLButtonElement>("auth-confirm-new-password-toggle").hidden = !needsNewPassword;
   authTitle.textContent =
     authMode === "login"
       ? "Sign in"
@@ -136,12 +146,38 @@ function showAuth(message = ""): void {
   byId<HTMLLabelElement>("auth-password-label").hidden = !needsPassword;
   authPassword.hidden = !needsPassword;
   authPassword.required = needsPassword;
-  authPassword.minLength = authMode === "register" ? 12 : 1;
+  authPassword.minLength = authMode === "register" ? 8 : 1;
   byId<HTMLLabelElement>("auth-new-password-label").hidden = !needsNewPassword;
   authNewPassword.hidden = !needsNewPassword;
   authNewPassword.required = needsNewPassword;
-  authNewPassword.minLength = 12;
+  authNewPassword.minLength = 8;
+  authConfirmPassword.required = authMode === "register";
+  authConfirmPassword.minLength = authMode === "register" ? 8 : 1;
+  authConfirmNewPassword.required = needsNewPassword;
+  authConfirmNewPassword.minLength = 8;
+  authPassword.minLength = authMode === "register" ? 8 : 1;
+  if (authMode === "reset") authNewPassword.minLength = 8;
 }
+function wirePasswordToggle(buttonId: string, input: HTMLInputElement, label: string): void {
+  const button = byId<HTMLButtonElement>(buttonId);
+  const update = () => {
+    const visible = input.type === "text";
+    const action = visible ? "Hide" : "Show";
+    button.textContent = action;
+    button.title = `${action} ${label}`;
+    button.setAttribute("aria-label", `${action} ${label}`);
+  };
+  button.addEventListener("click", () => {
+    input.type = input.type === "password" ? "text" : "password";
+    update();
+  });
+  update();
+}
+wirePasswordToggle("auth-password-toggle", authPassword, "password");
+wirePasswordToggle("auth-new-password-toggle", authNewPassword, "new password");
+wirePasswordToggle("auth-confirm-password-toggle", authConfirmPassword, "confirm password");
+wirePasswordToggle("auth-confirm-new-password-toggle", authConfirmNewPassword, "confirm password");
+
 authFriendly.value = localStorage.getItem(FRIENDLY_KEY) ?? defaultName;
 const friendlyName = () => toFriendlyPeerName(authFriendly.value || defaultName);
 let lastConfig: DemoConfig | null = null;
@@ -519,6 +555,14 @@ authForm.addEventListener("submit", async (event) => {
   authError.textContent = "";
   if (authMode === "login") {
     localStorage.setItem(FRIENDLY_KEY, authFriendly.value.trim() || defaultName);
+  }
+  if (authMode === "register" && authPassword.value !== authConfirmPassword.value) {
+    authError.textContent = "Passwords do not match.";
+    return;
+  }
+  if (authMode === "reset" && authNewPassword.value !== authConfirmNewPassword.value) {
+    authError.textContent = "New passwords do not match.";
+    return;
   }
   try {
     if (authMode === "register") {

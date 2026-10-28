@@ -22,7 +22,7 @@ class CreateUserDto {
   username!: string;
 
   @IsString()
-  @MinLength(12)
+  @MinLength(8)
   password!: string;
 
   @IsIn(["USER", "ADMIN"])

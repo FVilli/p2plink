@@ -2,7 +2,7 @@ import { Body, Controller, Post } from "@nestjs/common";
 import { IsEmail, IsString, MinLength } from "class-validator";
 class RegisterDto {
   @IsEmail() email!: string;
-  @IsString() @MinLength(12) password!: string;
+  @IsString() @MinLength(8) password!: string;
 }
 class EmailDto {
   @IsEmail() email!: string;
@@ -14,7 +14,7 @@ class VerifyDto {
 class ResetDto {
   @IsEmail() email!: string;
   @IsString() token!: string;
-  @IsString() @MinLength(12) newPassword!: string;
+  @IsString() @MinLength(8) newPassword!: string;
 }
 import { AuthService } from "./auth.service.js";
 class LoginDto {
