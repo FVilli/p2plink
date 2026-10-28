@@ -101,6 +101,9 @@ importers:
       mqtt:
         specifier: ^5.16.1
         version: 5.16.1
+      nodemailer:
+        specifier: ^7.0.0
+        version: 7.0.13
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -114,6 +117,9 @@ importers:
       '@types/node':
         specifier: ^24.19.2
         version: 24.19.2
+      '@types/nodemailer':
+        specifier: ^7.0.0
+        version: 7.0.12
       '@types/supertest':
         specifier: ^6.0.3
         version: 6.0.3
@@ -2008,6 +2014,9 @@ packages:
   '@types/node@24.19.2':
     resolution: {integrity: sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ==}
 
+  '@types/nodemailer@7.0.12':
+    resolution: {integrity: sha512-80vKwiIsVSyFA1rRovH59jNPLBOuc6dRZIHEu40gXTkBkZnQv8vog1xSGEb9j5q/tdMAs5ivvDR2pLTU0hGHXA==}
+
   '@types/readable-stream@4.0.25':
     resolution: {integrity: sha512-7GsxL8Wd5X3jh73/qgW7WCnbBvGSdD8U3E4Jiuus3/8I+PN20DtlkJtwFhr/sImXfDDQ2Z03i/9wNiIF3TVSsw==}
 
@@ -3479,6 +3488,10 @@ packages:
   node-releases@2.0.60:
     resolution: {integrity: sha512-OmO8+GM1JUZqXET720VrJCwkjUCXmCMQm0Z3UDDRbfNLHS4NEAvY60j5jiFv0tkKw2PNNlqOLhahVmwJIOLDIQ==}
     engines: {node: '>=18'}
+
+  nodemailer@7.0.13:
+    resolution: {integrity: sha512-PNDFSJdP+KFgdsG3ZzMXCgquO7I6McjY2vlqILjtJd0hy8wEvtugS9xKRF2NWlPNGxvLCXlTNIae4serI7dinw==}
+    engines: {node: '>=6.0.0'}
 
   npm-package-arg@14.0.0:
     resolution: {integrity: sha512-69XQh3k+dtGa1p+7RaR57IuG3rCko96xr/nUfN4yDYBXbTYICiWcOpsFKLN2GtGE9cyIljE+f1exnaYt9MvM+Q==}
@@ -6105,6 +6118,10 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
+  '@types/nodemailer@7.0.12':
+    dependencies:
+      '@types/node': 24.19.2
+
   '@types/readable-stream@4.0.25':
     dependencies:
       '@types/node': 24.19.2
@@ -7667,6 +7684,8 @@ snapshots:
   node-gyp-build@4.8.4: {}
 
   node-releases@2.0.60: {}
+
+  nodemailer@7.0.13: {}
 
   npm-package-arg@14.0.0:
     dependencies:

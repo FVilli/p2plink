@@ -29,7 +29,8 @@
     "mqtt": "^5.16.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "nodemailer": "^7.0.0"
   },
   "devDependencies": {
     "@nestjs/testing": "^12.3.2",
@@ -39,7 +40,8 @@
     "supertest": "^7.1.4",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "@types/nodemailer": "^7.0.0"
   },
   "engines": {
     "node": ">=22"

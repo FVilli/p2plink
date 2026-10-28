@@ -92,13 +92,14 @@ export class MosquittoAdminService implements BrokerAdmin, OnModuleInit, OnModul
     } catch (error) {
       if (!this.alreadyExists(error)) return;
     }
+    const prefix = config.meshTopicPrefix.replace(/\/$/u, "");
     const rules: Array<[string, string]> = [
-      ["publishClientSend", "presence/%u"],
-      ["subscribePattern", "presence/+"],
-      ["publishClientSend", "signal/+/%u"],
-      ["subscribePattern", "signal/%u/+"],
-      ["publishClientSend", "data/+/%u"],
-      ["subscribePattern", "data/%u/+"],
+      ["publishClientSend", `${prefix}/presence/%u`],
+      ["subscribePattern", `${prefix}/presence/+`],
+      ["publishClientSend", `${prefix}/signal/+/%u`],
+      ["subscribePattern", `${prefix}/signal/%u/+`],
+      ["publishClientSend", `${prefix}/data/+/%u`],
+      ["subscribePattern", `${prefix}/data/%u/+`],
       ["subscribePattern", config.mqttRevocationTopic],
     ];
     for (const [acltype, topic] of rules) {

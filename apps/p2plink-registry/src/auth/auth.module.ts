@@ -7,10 +7,12 @@ import { JwtAuthGuard } from "./jwt-auth.guard.js";
 import { RolesGuard } from "./roles.guard.js";
 import { config } from "../config.js";
 import { BrokerModule } from "../broker/broker.module.js";
+import { MailModule } from "../mail/mail.module.js";
 
 @Module({
   imports: [
     BrokerModule,
+    MailModule,
     JwtModule.register({
       secret: config.jwtSecret,
       signOptions: { expiresIn: config.accessTtlSeconds },

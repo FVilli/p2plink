@@ -8,7 +8,13 @@ async function seedUser(username: string, password: string, role: "USER" | "ADMI
   const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
   await prisma.user.upsert({
     where: { username: username.toLowerCase() },
-    create: { username: username.toLowerCase(), passwordHash, role },
+    create: {
+      username: username.toLowerCase(),
+      passwordHash,
+      role,
+      status: "ACTIVE",
+      emailVerifiedAt: new Date(),
+    },
     update: {},
   });
 }
