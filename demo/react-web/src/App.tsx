@@ -488,17 +488,19 @@ export default function App() {
                         required
                         minLength={authMode === "login" ? 1 : 8}
                         placeholder={
-                          authMode === "reset-password" ? "New password (min 8)" : "Password (min 8)"
+                          authMode === "reset-password"
+                            ? "New password (min 8)"
+                            : "Password (min 8)"
                         }
                       />
                       <button
                         className="password-toggle"
-                      type="button"
-                      title={passwordVisible.password ? "Hide password" : "Show password"}
-                      aria-label={passwordVisible.password ? "Hide password" : "Show password"}
-                      onClick={() => setPasswordVisible((v) => ({ ...v, password: !v.password }))}
-                    >
-                      👁️
+                        type="button"
+                        title={passwordVisible.password ? "Hide password" : "Show password"}
+                        aria-label={passwordVisible.password ? "Hide password" : "Show password"}
+                        onClick={() => setPasswordVisible((v) => ({ ...v, password: !v.password }))}
+                      >
+                        👁️
                       </button>
                     </div>
                   </>
@@ -515,16 +517,20 @@ export default function App() {
                       />
                       <button
                         className="password-toggle"
-                      type="button"
-                      title={
-                        passwordVisible.confirm ? "Hide confirm password" : "Show confirm password"
-                      }
-                      aria-label={
-                        passwordVisible.confirm ? "Hide confirm password" : "Show confirm password"
-                      }
-                      onClick={() => setPasswordVisible((v) => ({ ...v, confirm: !v.confirm }))}
-                    >
-                      👁️
+                        type="button"
+                        title={
+                          passwordVisible.confirm
+                            ? "Hide confirm password"
+                            : "Show confirm password"
+                        }
+                        aria-label={
+                          passwordVisible.confirm
+                            ? "Hide confirm password"
+                            : "Show confirm password"
+                        }
+                        onClick={() => setPasswordVisible((v) => ({ ...v, confirm: !v.confirm }))}
+                      >
+                        👁️
                       </button>
                     </div>
                   </>
@@ -541,22 +547,22 @@ export default function App() {
                       />
                       <button
                         className="password-toggle"
-                      type="button"
-                      title={
-                        passwordVisible.confirmNew
-                          ? "Hide confirm new password"
-                          : "Show confirm new password"
-                      }
-                      aria-label={
-                        passwordVisible.confirmNew
-                          ? "Hide confirm new password"
-                          : "Show confirm new password"
-                      }
-                      onClick={() =>
-                        setPasswordVisible((v) => ({ ...v, confirmNew: !v.confirmNew }))
-                      }
-                    >
-                      👁️
+                        type="button"
+                        title={
+                          passwordVisible.confirmNew
+                            ? "Hide confirm new password"
+                            : "Show confirm new password"
+                        }
+                        aria-label={
+                          passwordVisible.confirmNew
+                            ? "Hide confirm new password"
+                            : "Show confirm new password"
+                        }
+                        onClick={() =>
+                          setPasswordVisible((v) => ({ ...v, confirmNew: !v.confirmNew }))
+                        }
+                      >
+                        👁️
                       </button>
                     </div>
                   </>

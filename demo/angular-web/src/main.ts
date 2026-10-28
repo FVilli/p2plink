@@ -122,8 +122,8 @@ class BytesRatePipe implements PipeTransform {
           <p class="muted">P2PLink Registry account</p>
           <label>Email</label><input name="email" type="email" required [value]="authEmail()" />
           @if (authMode() === "Login" || authMode() === "Register") {
-            <label>Password</label
-            ><div class="password-field">
+            <label>Password</label>
+            <div class="password-field">
               <input
                 name="password"
                 [type]="passwordVisible() ? 'text' : 'password'"
@@ -140,8 +140,8 @@ class BytesRatePipe implements PipeTransform {
               </button>
             </div>
             @if (authMode() === "Register") {
-              <label>Confirm password</label
-              ><div class="password-field">
+              <label>Confirm password</label>
+              <div class="password-field">
                 <input
                   name="confirmPassword"
                   [type]="confirmVisible() ? 'text' : 'password'"
@@ -150,7 +150,9 @@ class BytesRatePipe implements PipeTransform {
                 /><button
                   class="password-toggle"
                   type="button"
-                  [attr.title]="confirmVisible() ? 'Hide confirm password' : 'Show confirm password'"
+                  [attr.title]="
+                    confirmVisible() ? 'Hide confirm password' : 'Show confirm password'
+                  "
                   [attr.aria-label]="
                     confirmVisible() ? 'Hide confirm password' : 'Show confirm password'
                   "
@@ -175,8 +177,8 @@ class BytesRatePipe implements PipeTransform {
             <label>Token</label><input name="token" required [value]="authToken()" />
           }
           @if (authMode() === "Reset password") {
-            <label>New password</label
-            ><div class="password-field">
+            <label>New password</label>
+            <div class="password-field">
               <input
                 name="newPassword"
                 [type]="passwordVisible() ? 'text' : 'password'"
@@ -193,7 +195,8 @@ class BytesRatePipe implements PipeTransform {
               </button>
             </div>
             <label>Confirm new password</label>
-            ><div class="password-field">
+            >
+            <div class="password-field">
               <input
                 name="confirmNewPassword"
                 [type]="confirmVisible() ? 'text' : 'password'"
