@@ -62,7 +62,8 @@ export class PresenceService implements OnModuleInit, OnModuleDestroy {
         this.peers.delete(peerId);
         return;
       }
-      if (value.peerId !== peerId || value.v !== 1 || value.type !== "presence") return;
+      if (value.peerId !== peerId || (value.v !== 1 && value.v !== 2) || value.type !== "presence")
+        return;
       if (
         typeof value.name !== "string" ||
         typeof value.kind !== "string" ||
