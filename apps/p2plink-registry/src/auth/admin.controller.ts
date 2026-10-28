@@ -87,7 +87,10 @@ export class AdminController {
   @ApiOperation({ summary: "Delete a peer and revoke its user's sessions" })
   @Delete("peers/:id")
   async deletePeer(@Param("id") id: string) {
-    const peer = await this.prisma.peer.findFirst({ where: { OR: [{ id }, { peerId: id }] } });
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const peer = await this.prisma.peer.findFirst({
+      where: uuid.test(id) ? { OR: [{ id }, { peerId: id }] } : { peerId: id },
+    });
     if (!peer) throw new ConflictException("Peer not found");
     try {
       await this.broker.deletePeer(peer.peerId);
