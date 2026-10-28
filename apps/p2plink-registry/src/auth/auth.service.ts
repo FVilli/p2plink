@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { Injectable, Logger, UnauthorizedException } from "@nestjs/common";
 import { MailService } from "../mail/mail.service.js";
 import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -11,6 +11,18 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 const hash = (token: string) => createHash("sha256").update(token).digest("hex");
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
+  private maskEmail(email: string): string {
+    const [local, domain] = email.split("@");
+    return `${local?.slice(0, 1) ?? "*"}***@${
+      domain
+        ?.split(".")
+        .map((part) => `${part.slice(0, 1)}***`)
+        .join(".") ?? "***"
+    }`;
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -130,6 +142,11 @@ export class AuthService {
     if (user.status === "PENDING") {
       const token = await this.issueToken(user.id, "verification");
       await this.mail.sendVerification(normalized, token);
+      this.logger.log(`Verification email queued for ${this.maskEmail(normalized)}`);
+    } else if (user.status === "ACTIVE") {
+      this.logger.log(
+        `Registration email skipped for ACTIVE account ${this.maskEmail(normalized)}`,
+      );
     }
     return { ok: true };
   }
@@ -139,6 +156,11 @@ export class AuthService {
     if (user?.status === "PENDING") {
       const token = await this.issueToken(user.id, "verification");
       await this.mail.sendVerification(normalized, token);
+      this.logger.log(`Verification email queued for ${this.maskEmail(normalized)}`);
+    } else if (user?.status === "ACTIVE") {
+      this.logger.log(
+        `Verification email skipped for ACTIVE account ${this.maskEmail(normalized)}`,
+      );
     }
     return { ok: true };
   }
@@ -185,6 +207,11 @@ export class AuthService {
     if (user?.status === "ACTIVE" && user.emailVerifiedAt) {
       const token = await this.issueToken(user.id, "reset");
       await this.mail.sendPasswordReset(normalized, token);
+      this.logger.log(`Password reset email queued for ${this.maskEmail(normalized)}`);
+    } else if (user?.status === "ACTIVE") {
+      this.logger.log(
+        `Password reset email skipped for ACTIVE account ${this.maskEmail(normalized)}`,
+      );
     }
     return { ok: true };
   }

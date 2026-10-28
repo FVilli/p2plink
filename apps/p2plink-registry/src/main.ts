@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 const app = await NestFactory.create<NestFastifyApplication>(
   AppModule,
-  new FastifyAdapter({ logger: false }),
+  new FastifyAdapter({ logger: { level: "info" } }),
 );
 app.useGlobalPipes(
   new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),

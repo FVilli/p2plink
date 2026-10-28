@@ -568,7 +568,17 @@ authForm.addEventListener("submit", async (event) => {
     if (authMode === "register") {
       await api.register(authEmail.value, authPassword.value);
       authMode = "verify";
-      showAuth("Check your email, then paste the token here.");
+      showAuth(
+        "If this account is already active, no email is sent—sign in or use Forgot instead. Otherwise, check your email and spam folder, then paste the token here.",
+      );
+      return;
+    }
+    if (authMode === "resend") {
+      await api.resendVerification(authEmail.value);
+      authMode = "verify";
+      showAuth(
+        "If this account is already active, no email is sent—sign in or use Forgot instead. Otherwise, check your email and spam folder, then paste the token here.",
+      );
       return;
     }
     if (authMode === "forgot") {
