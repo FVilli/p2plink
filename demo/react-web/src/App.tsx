@@ -13,7 +13,14 @@ import {
 import { formatByteSize } from "@p2plink/core";
 import { createBrowserWebRtcEngine } from "@p2plink/webrtc";
 
-type Config = { url: string; username: string; password: string; name: string; clientId?: string };
+type Config = {
+  url: string;
+  username: string;
+  password: string;
+  name: string;
+  clientId?: string;
+  peerId?: string;
+};
 const KEY = "p2plink-demo-config",
   ACCESS_KEY = "p2plink-registry-access-token",
   REFRESH_KEY = "p2plink-registry-refresh-token",
@@ -168,6 +175,7 @@ export default function App() {
         password: c.password,
         name: c.name,
         ...(c.clientId ? { clientId: c.clientId } : {}),
+        ...(c.peerId ? { peerId: c.peerId } : {}),
         kind: "browser",
         pingBytes,
         version: __APP_VERSION__,
@@ -262,7 +270,7 @@ export default function App() {
         name: defaultName,
       });
       setEditing(false);
-      await connect({ ...peerInfo.mqtt, name: peerInfo.peer.name });
+      await connect({ ...peerInfo.mqtt, name: peerInfo.peer.name, peerId: peerInfo.peer.peerId });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -300,7 +308,7 @@ export default function App() {
             storage: localStorage,
             name: defaultName,
           });
-          await connect({ ...info.mqtt, name: info.peer.name });
+          await connect({ ...info.mqtt, name: info.peer.name, peerId: info.peer.peerId });
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
           setTokens(null);

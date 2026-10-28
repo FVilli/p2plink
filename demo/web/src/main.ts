@@ -29,6 +29,7 @@ interface DemoConfig {
   password: string;
   name: string;
   clientId?: string;
+  peerId?: string;
 }
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -340,6 +341,7 @@ function loadStoredConfig(): DemoConfig | null {
       password: value.password,
       name: value.name,
       ...(typeof value.clientId === "string" ? { clientId: value.clientId } : {}),
+      ...(typeof value.peerId === "string" ? { peerId: value.peerId } : {}),
     };
   } catch {
     return null;
@@ -434,6 +436,7 @@ async function connect(config: DemoConfig): Promise<void> {
     password: config.password,
     name: config.name,
     ...(config.clientId ? { clientId: config.clientId } : {}),
+    ...(config.peerId ? { peerId: config.peerId } : {}),
     kind: "browser",
     pingBytes,
     iceServers,
@@ -593,7 +596,11 @@ authForm.addEventListener("submit", async (event) => {
         name: authEmail.value,
       });
       registryPeerId = registered.peer.peerId;
-      await connect({ ...registered.mqtt, name: registered.peer.name });
+      await connect({
+        ...registered.mqtt,
+        name: registered.peer.name,
+        peerId: registered.peer.peerId,
+      });
       return;
     }
     const tokens = await api.login(authEmail.value, authPassword.value);
@@ -606,7 +613,11 @@ authForm.addEventListener("submit", async (event) => {
       name: authEmail.value,
     });
     registryPeerId = registered.peer.peerId;
-    await connect({ ...registered.mqtt, name: registered.peer.name });
+    await connect({
+      ...registered.mqtt,
+      name: registered.peer.name,
+      peerId: registered.peer.peerId,
+    });
   } catch (e) {
     authToken = null;
     showAuth(e instanceof Error ? e.message : "Authentication failed");
@@ -641,7 +652,11 @@ if (
       });
       registryPeerId = registered.peer.peerId;
       history.replaceState({}, "", location.pathname);
-      void connect({ ...registered.mqtt, name: registered.peer.name });
+      void connect({
+        ...registered.mqtt,
+        name: registered.peer.name,
+        peerId: registered.peer.peerId,
+      });
     })
     .catch((e) => showAuth(e instanceof Error ? e.message : "Verification failed"));
 } else if (authParams.get("auth") === "reset-password") {
@@ -692,7 +707,11 @@ if (authParams.has("auth")) {
   })
     .then((registered) => {
       registryPeerId = registered.peer.peerId;
-      void connect({ ...registered.mqtt, name: registered.peer.name });
+      void connect({
+        ...registered.mqtt,
+        name: registered.peer.name,
+        peerId: registered.peer.peerId,
+      });
     })
     .catch(() => {
       localStorage.removeItem(TOKENS_KEY);

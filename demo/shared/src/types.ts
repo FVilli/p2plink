@@ -12,6 +12,8 @@ export interface MeshPeerConfig {
   password?: string;
   /** MQTT client id. Generated when omitted. */
   clientId?: string;
+  /** Registry-assigned peer id. Generated when omitted (manual demo mode). */
+  peerId?: string;
   /** Human-readable name shown by other peers. */
   name: string;
   kind: PeerKind;

@@ -20,7 +20,14 @@ const VERSION = "0.2.1",
   REGISTRY_URL = "https://p2plink-registry.fvsg.mqu.it",
   DEFAULT_URL = "wss://mqtt-ws.fvsg.it:443/ws",
   DEFAULT_USERNAME = "main:rmq-usr";
-type Config = { url: string; username: string; password: string; name: string; clientId?: string };
+type Config = {
+  url: string;
+  username: string;
+  password: string;
+  name: string;
+  clientId?: string;
+  peerId?: string;
+};
 interface DemoRuntime {
   url?: unknown;
   username?: unknown;
@@ -429,6 +436,7 @@ class App {
         password: peer.mqtt.password,
         name: peer.peer.name,
         clientId: peer.mqtt.clientId,
+        peerId: peer.peer.peerId,
       });
     } catch (e) {
       this.authError.set(String(e));
@@ -478,6 +486,7 @@ class App {
       password: c.password,
       name: c.name,
       ...(c.clientId ? { clientId: c.clientId } : {}),
+      ...(c.peerId ? { peerId: c.peerId } : {}),
       kind: "browser",
       pingBytes: Number(demoWindow.__P2PLINK_DEMO_CONFIG__?.pingBytes ?? 2048),
       iceServers: demoWindow.__P2PLINK_DEMO_CONFIG__?.iceServers,

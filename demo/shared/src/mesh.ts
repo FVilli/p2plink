@@ -41,7 +41,7 @@ const consoleLogger: Logger = {
 };
 
 class MeshImpl implements MeshPeer {
-  readonly peerId = newPeerId();
+  readonly peerId: string;
   private readonly config: MeshPeerConfig;
   private readonly version: string;
   private readonly logger: Logger;
@@ -65,6 +65,7 @@ class MeshImpl implements MeshPeer {
 
   constructor(config: MeshPeerConfig) {
     this.config = config;
+    this.peerId = config.peerId ?? newPeerId();
     this.version = config.version ?? "0.0.0";
     this.logger = config.logger ?? consoleLogger;
     this.webRtcEnabled = !config.disableWebRtc;
