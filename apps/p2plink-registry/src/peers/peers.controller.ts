@@ -258,8 +258,8 @@ export class PeersController {
       issuedAt,
       expiresAt,
     });
-    await this.prisma.$transaction(async (tx) => {
-      await tx.peer.update({
+    const updatedPeer = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.peer.update({
         where: { id: peer.id },
         data: {
           name: requestedName,
@@ -272,8 +272,10 @@ export class PeersController {
         where: { peerId: peer.id },
         data: { expiresAt: grantExpiry, status: "ACTIVE" },
       });
+      return updated;
     });
     return {
+      peer: updatedPeer,
       mqtt: { url: config.mqttPublicUrl, username: id, password, clientId: id },
       certificate: cert.token,
     };

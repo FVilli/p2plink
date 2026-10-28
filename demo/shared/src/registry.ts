@@ -221,12 +221,16 @@ export async function ensureRegistryPeer(input: {
         new TextEncoder().encode(proof("credentials", challenge.challengeId, challenge.nonce)),
       ),
     );
-    const peer = await input.api.credentials(input.accessToken, stored.peer.peerId, {
+    const response = (await input.api.credentials(input.accessToken, stored.peer.peerId, {
       challengeId: challenge.challengeId,
       nonce: challenge.nonce,
       signature,
       name: input.name,
-    });
+    })) as Partial<RegistryPeer>;
+    const peer: RegistryPeer = {
+      ...response,
+      peer: response.peer ?? { ...stored.peer, name: input.name },
+    } as RegistryPeer;
     input.storage.setItem(REGISTRY_PEER_KEY, JSON.stringify(peer));
     return peer;
   }
