@@ -220,6 +220,14 @@ th {
   background: #0f1622;
   color: #e8edf5;
 }
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.auth-links button {
+  background: #26344a;
+}
 .config-error {
   color: #ff9c9c;
   margin: 0;

@@ -38,6 +38,16 @@
             ⚙️
           </button>
           <button
+            id="logout"
+            class="icon-button"
+            type="button"
+            title="Logout"
+            aria-label="Logout"
+            hidden
+          >
+            ↪
+          </button>
+          <button
             id="reset-stats"
             class="icon-button"
             type="button"
@@ -48,6 +58,25 @@
             ↺
           </button>
         </div>
+      </section>
+      <section id="auth-panel" class="config" hidden>
+        <form id="auth-form">
+          <h2 id="auth-title">Sign in</h2>
+          <label>Email</label><input id="auth-email" type="email" autocomplete="email" required />
+          <label id="auth-token-label" hidden>Email token</label
+          ><input id="auth-token" type="text" autocomplete="one-time-code" hidden />
+          <label id="auth-password-label">Password</label
+          ><input id="auth-password" type="password" autocomplete="current-password" required />
+          <label id="auth-new-password-label" hidden>New password</label
+          ><input id="auth-new-password" type="password" autocomplete="new-password" hidden />
+          <p id="auth-error" class="config-error" role="alert"></p>
+          <button id="auth-submit" type="submit">Continue</button>
+          <div class="auth-actions">
+            <button id="auth-register" type="button">Create account</button
+            ><button id="auth-forgot" type="button">Forgot password</button
+            ><button id="auth-resend" type="button">Resend verification</button>
+          </div>
+        </form>
       </section>
       <section id="config-panel" class="config" hidden>
         <form id="config-form">

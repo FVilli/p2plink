@@ -23,6 +23,7 @@ class LoginDto {
 }
 class TokenDto {
   @IsString() @MinLength(1) refreshToken!: string;
+  @IsString() peerId?: string;
 }
 @Controller("v1/auth")
 export class AuthController {
@@ -49,6 +50,6 @@ export class AuthController {
     return this.auth.refresh(body.refreshToken);
   }
   @Post("logout") logout(@Body() body: TokenDto) {
-    return this.auth.logout(body.refreshToken);
+    return this.auth.logout(body.refreshToken, body.peerId);
   }
 }

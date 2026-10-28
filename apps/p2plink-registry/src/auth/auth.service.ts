@@ -3,6 +3,8 @@ import { MailService } from "../mail/mail.service.js";
 import { JwtService } from "@nestjs/jwt";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { config } from "../config.js";
+import { Inject } from "@nestjs/common";
+import { BROKER_ADMIN, type BrokerAdmin } from "../broker/broker-admin.interface.js";
 import * as argon2 from "argon2";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
@@ -13,6 +15,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly mail: MailService,
+    @Inject(BROKER_ADMIN) private readonly broker: BrokerAdmin,
   ) {}
   async login(username: string, password: string) {
     const user = await this.prisma.user.findUnique({
@@ -66,7 +69,28 @@ export class AuthService {
       refreshToken: next,
     };
   }
-  async logout(token: string) {
+  async logout(token: string, peerId?: string) {
+    const session = await this.prisma.session.findUnique({
+      where: { tokenHash: hash(token) },
+      select: { userId: true },
+    });
+    if (session && peerId) {
+      const peer = await this.prisma.peer.findFirst({
+        where: { peerId, userId: session.userId },
+        select: { peerId: true },
+      });
+      if (peer) {
+        try {
+          await this.broker.disablePeer(peer.peerId);
+        } catch {
+          // Local logout must still complete if the broker is unavailable.
+        }
+        await this.prisma.brokerGrant.updateMany({
+          where: { mqttUsername: peer.peerId },
+          data: { status: "DISABLED" },
+        });
+      }
+    }
     await this.prisma.session.updateMany({
       where: { tokenHash: hash(token), revokedAt: null },
       data: { revokedAt: new Date() },

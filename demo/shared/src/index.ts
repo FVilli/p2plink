@@ -13,3 +13,4 @@ export type {
   TrafficDirection,
   TrafficView,
 } from "./types.js";
+export * from "./registry.js";

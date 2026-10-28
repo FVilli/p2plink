@@ -5,12 +5,18 @@ import {
   type MeshPeer,
   type MeshSnapshot,
   type PeerStats,
+  RegistryApi,
+  ensureRegistryPeer,
+  DEFAULT_REGISTRY_URL,
+  type RegistryTokens,
 } from "@p2plink/demo-mesh";
 import { formatByteSize } from "@p2plink/core";
 import { createBrowserWebRtcEngine } from "@p2plink/webrtc";
 
-type Config = { url: string; username: string; password: string; name: string };
+type Config = { url: string; username: string; password: string; name: string; clientId?: string };
 const KEY = "p2plink-demo-config",
+  ACCESS_KEY = "p2plink-registry-access-token",
+  REFRESH_KEY = "p2plink-registry-refresh-token",
   URL_DEFAULT = "wss://mqtt-ws.fvsg.it:443/ws",
   USER_DEFAULT = "main:rmq-usr";
 const runtime = window.__P2PLINK_DEMO_CONFIG__;
@@ -61,9 +67,21 @@ const issueContext = (extra: Record<string, string | number | boolean> = {}) => 
 });
 export default function App() {
   const [snapshot, setSnapshot] = useState<MeshSnapshot | null>(null);
+  const [tokens, setTokens] = useState<RegistryTokens | null>(() => {
+    const accessToken = localStorage.getItem(ACCESS_KEY),
+      refreshToken = localStorage.getItem(REFRESH_KEY);
+    return accessToken && refreshToken ? { accessToken, refreshToken } : null;
+  });
+  const [authMode, setAuthMode] = useState(() => {
+    const auth = new URLSearchParams(location.search).get("auth");
+    return auth === "verify-email" || auth === "reset-password" ? auth : "login";
+  });
+  const [authMessage, setAuthMessage] = useState("");
+  const registryUrl = runtimeString("registryUrl") ?? env.VITE_REGISTRY_URL ?? DEFAULT_REGISTRY_URL;
   const [config, setConfig] = useState<Config>(() => loadConfig() ?? defaults());
   const [editing, setEditing] = useState(
-    !loadConfig() &&
+    !tokens &&
+      !loadConfig() &&
       !(runtimeString("url") && runtimeString("username") && runtimeString("password")),
   );
   const [error, setError] = useState("");
@@ -149,6 +167,7 @@ export default function App() {
         username: c.username,
         password: c.password,
         name: c.name,
+        ...(c.clientId ? { clientId: c.clientId } : {}),
         kind: "browser",
         pingBytes,
         version: __APP_VERSION__,
@@ -196,6 +215,98 @@ export default function App() {
       setEditing(navigator.onLine);
     }
   }
+  async function authenticate(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError("");
+    setAuthMessage("");
+    const d = new FormData(e.currentTarget),
+      email = String(d.get("email") || "").trim(),
+      password = String(d.get("password") || ""),
+      token = String(d.get("token") || "");
+    const api = new RegistryApi(registryUrl);
+    try {
+      if (authMode === "resend") {
+        await api.resendVerification(email);
+        setAuthMessage("Verification email sent.");
+      } else if (authMode === "register") {
+        await api.register(email, password);
+        setAuthMessage("Registration complete. Check your email to verify your account.");
+        setAuthMode("login");
+      } else if (authMode === "forgot") {
+        await api.forgotPassword(email);
+        setAuthMessage("If the account exists, a reset link has been sent.");
+      } else if (authMode === "verify-email") {
+        const result = await api.verifyEmail(email, token);
+        await acceptTokens(result);
+      } else if (authMode === "reset-password") {
+        await api.resetPassword(email, token, password);
+        setAuthMessage("Password updated. Please log in.");
+        setAuthMode("login");
+      } else {
+        await acceptTokens(await api.login(email, password));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+  async function acceptTokens(value: RegistryTokens) {
+    localStorage.setItem(ACCESS_KEY, value.accessToken);
+    localStorage.setItem(REFRESH_KEY, value.refreshToken);
+    setTokens(value);
+    const api = new RegistryApi(registryUrl);
+    try {
+      const peerInfo = await ensureRegistryPeer({
+        api,
+        accessToken: value.accessToken,
+        storage: localStorage,
+        name: defaultName,
+      });
+      setEditing(false);
+      await connect({ ...peerInfo.mqtt, name: peerInfo.peer.name });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+  async function logout() {
+    const current = peer;
+    setPeer(null);
+    setSnapshot(null);
+    if (current) await current.stop().catch(() => undefined);
+    const refresh = localStorage.getItem(REFRESH_KEY),
+      peerId = snapshot?.self.peerId;
+    if (refresh) await new RegistryApi(registryUrl).logout(refresh, peerId).catch(() => undefined);
+    localStorage.clear();
+    setTokens(null);
+    setEditing(true);
+    setError("");
+  }
+  async function resendVerification(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const email = String(new FormData(e.currentTarget).get("email") || "").trim();
+    try {
+      await new RegistryApi(registryUrl).resendVerification(email);
+      setAuthMessage("Verification email sent.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+  useEffect(() => {
+    if (tokens && !peer && navigator.onLine)
+      void (async () => {
+        try {
+          const info = await ensureRegistryPeer({
+            api: new RegistryApi(registryUrl),
+            accessToken: tokens.accessToken,
+            storage: localStorage,
+            name: defaultName,
+          });
+          await connect({ ...info.mqtt, name: info.peer.name });
+        } catch (err) {
+          setError(err instanceof Error ? err.message : String(err));
+          setTokens(null);
+        }
+      })();
+  }, []);
   useEffect(() => {
     const stored = loadConfig();
     const rc =
@@ -286,6 +397,17 @@ export default function App() {
             >
               ⚙️
             </button>
+            {tokens && (
+              <button
+                id="logout"
+                className="icon-button"
+                title="Logout"
+                aria-label="Logout"
+                onClick={() => void logout()}
+              >
+                ⇥
+              </button>
+            )}
             <button
               id="reset-stats"
               className="icon-button"
@@ -300,6 +422,103 @@ export default function App() {
             </button>
           </div>
         </section>
+        {!tokens &&
+          !loadConfig() &&
+          !(runtimeString("url") && runtimeString("username") && runtimeString("password")) && (
+            <section className="config auth-panel">
+              <form
+                onSubmit={
+                  authMode === "verify-email" || authMode === "reset-password"
+                    ? authenticate
+                    : authMode === "resend"
+                      ? resendVerification
+                      : authenticate
+                }
+              >
+                <h2>
+                  Registry{" "}
+                  {authMode === "register"
+                    ? "registration"
+                    : authMode === "verify-email"
+                      ? "Verify email"
+                      : authMode === "reset-password"
+                        ? "Reset password"
+                        : authMode === "forgot"
+                          ? "Forgot password"
+                          : "login"}
+                </h2>
+                <p className="muted">Registry: {registryUrl}</p>
+                {authMode === "verify-email" || authMode === "reset-password" ? (
+                  <input
+                    name="token"
+                    required
+                    placeholder="Email token"
+                    defaultValue={new URLSearchParams(location.search).get("token") ?? ""}
+                  />
+                ) : null}
+                {authMode === "resend" ||
+                authMode === "verify-email" ||
+                authMode === "reset-password" ||
+                authMode === "login" ||
+                authMode === "register" ||
+                authMode === "forgot" ? (
+                  <input
+                    name="email"
+                    type="email"
+                    required
+                    placeholder="Email"
+                    defaultValue={new URLSearchParams(location.search).get("email") ?? ""}
+                  />
+                ) : null}
+                {authMode === "login" ||
+                authMode === "register" ||
+                authMode === "reset-password" ? (
+                  <input
+                    name="password"
+                    type="password"
+                    required
+                    minLength={authMode === "login" ? 1 : 12}
+                    placeholder={
+                      authMode === "reset-password" ? "New password (min 12)" : "Password (min 12)"
+                    }
+                  />
+                ) : null}
+                <button type="submit">
+                  {authMode === "verify-email"
+                    ? "Verify email"
+                    : authMode === "reset-password"
+                      ? "Reset password"
+                      : authMode === "forgot"
+                        ? "Send reset link"
+                        : authMode === "resend"
+                          ? "Resend verification"
+                          : authMode === "register"
+                            ? "Register"
+                            : "Login"}
+                </button>
+                <p className="config-error" role="alert">
+                  {error}
+                </p>
+                <p className="muted">{authMessage}</p>
+                {authMode !== "verify-email" && authMode !== "reset-password" && (
+                  <div className="auth-links">
+                    <button type="button" onClick={() => setAuthMode("login")}>
+                      Login
+                    </button>
+                    <button type="button" onClick={() => setAuthMode("register")}>
+                      Register
+                    </button>
+                    <button type="button" onClick={() => setAuthMode("forgot")}>
+                      Forgot password
+                    </button>
+                    <button type="button" onClick={() => setAuthMode("resend")}>
+                      Resend verification
+                    </button>
+                  </div>
+                )}
+              </form>
+            </section>
+          )}
         {editing && (
           <section id="config-panel" className="config">
             <form id="config-form" onSubmit={submit}>

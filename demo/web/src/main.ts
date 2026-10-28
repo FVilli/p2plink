@@ -6,12 +6,20 @@ import {
   type PeerStats,
 } from "@p2plink/demo-mesh";
 import { formatByteSize } from "@p2plink/core";
+import { DEFAULT_REGISTRY_URL, RegistryApi, ensureRegistryPeer } from "@p2plink/demo-mesh";
 import { createBrowserWebRtcEngine } from "@p2plink/webrtc";
 import { registerSW } from "virtual:pwa-register";
 import "./style.css";
 
 const APP_VERSION = __APP_VERSION__;
 const CONFIG_KEY = "p2plink-demo-config";
+const TOKENS_KEY = "p2plink-registry-tokens";
+const api = new RegistryApi(
+  ((window as { __P2PLINK_DEMO_CONFIG__?: Record<string, unknown> }).__P2PLINK_DEMO_CONFIG__
+    ?.registryUrl as string) ??
+    import.meta.env.VITE_REGISTRY_URL ??
+    DEFAULT_REGISTRY_URL,
+);
 const DEFAULT_URL = "wss://mqtt-ws.fvsg.it:443/ws";
 const DEFAULT_USERNAME = "main:rmq-usr";
 
@@ -20,6 +28,7 @@ interface DemoConfig {
   username: string;
   password: string;
   name: string;
+  clientId?: string;
 }
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -61,6 +70,63 @@ const iceServers =
     : [{ urls: "stun:stun.l.google.com:19302" }]);
 
 let peer: MeshPeer | null = null;
+let registryPeerId: string | undefined;
+const authPanel = byId<HTMLElement>("auth-panel");
+const authForm = byId<HTMLFormElement>("auth-form");
+const authEmail = byId<HTMLInputElement>("auth-email");
+const authPassword = byId<HTMLInputElement>("auth-password");
+const authError = byId<HTMLParagraphElement>("auth-error");
+let authMode: "login" | "register" | "forgot" | "reset" | "verify" = "login";
+let authToken: string | null = null;
+const storedTokens = (): { accessToken: string; refreshToken: string } | null => {
+  try {
+    return JSON.parse(localStorage.getItem(TOKENS_KEY) || "null");
+  } catch {
+    return null;
+  }
+};
+const authTitle = byId<HTMLHeadingElement>("auth-title");
+const authTokenInput = byId<HTMLInputElement>("auth-token");
+const authNewPassword = byId<HTMLInputElement>("auth-new-password");
+const authSubmit = byId<HTMLButtonElement>("auth-submit");
+function showAuth(message = ""): void {
+  configPanel.hidden = true;
+  authPanel.hidden = false;
+  authError.textContent = message;
+  const needsToken = authMode === "reset" || authMode === "verify";
+  const needsPassword = authMode === "login" || authMode === "register";
+  const needsNewPassword = authMode === "reset";
+  authTitle.textContent =
+    authMode === "login"
+      ? "Sign in"
+      : authMode === "register"
+        ? "Create account"
+        : authMode === "forgot"
+          ? "Reset password"
+          : authMode === "verify"
+            ? "Verify email"
+            : "Set a new password";
+  authSubmit.textContent =
+    authMode === "login"
+      ? "Sign in"
+      : authMode === "register"
+        ? "Create account"
+        : authMode === "forgot"
+          ? "Send reset instructions"
+          : authMode === "verify"
+            ? "Verify email"
+            : "Update password";
+  byId<HTMLLabelElement>("auth-token-label").hidden = !needsToken;
+  authTokenInput.hidden = !needsToken;
+  byId<HTMLLabelElement>("auth-password-label").hidden = !needsPassword;
+  authPassword.hidden = !needsPassword;
+  authPassword.required = needsPassword;
+  authPassword.minLength = authMode === "register" ? 12 : 1;
+  byId<HTMLLabelElement>("auth-new-password-label").hidden = !needsNewPassword;
+  authNewPassword.hidden = !needsNewPassword;
+  authNewPassword.required = needsNewPassword;
+  authNewPassword.minLength = 12;
+}
 let currentConfig: DemoConfig | null = null;
 let lastConfig: DemoConfig | null = null;
 
@@ -273,6 +339,7 @@ function loadStoredConfig(): DemoConfig | null {
       username: value.username,
       password: value.password,
       name: value.name,
+      ...(typeof value.clientId === "string" ? { clientId: value.clientId } : {}),
     };
   } catch {
     return null;
@@ -366,6 +433,7 @@ async function connect(config: DemoConfig): Promise<void> {
     username: config.username,
     password: config.password,
     name: config.name,
+    ...(config.clientId ? { clientId: config.clientId } : {}),
     kind: "browser",
     pingBytes,
     iceServers,
@@ -376,6 +444,8 @@ async function connect(config: DemoConfig): Promise<void> {
   });
   peer = mesh;
   mesh.onSnapshot(render);
+  authPanel.hidden = true;
+  byId<HTMLButtonElement>("logout").hidden = !authToken;
   editConfigButton.disabled = false;
   resetButton.disabled = false;
   try {
@@ -472,6 +542,115 @@ resetButton.addEventListener("click", () => {
   }
 });
 
+byId<HTMLButtonElement>("auth-register").onclick = () => {
+  authMode = "register";
+  showAuth();
+};
+byId<HTMLButtonElement>("auth-forgot").onclick = () => {
+  authMode = "forgot";
+  showAuth();
+};
+byId<HTMLButtonElement>("auth-resend").onclick = async () => {
+  try {
+    await api.resendVerification(authEmail.value);
+    showAuth("Verification email sent.");
+  } catch (e) {
+    showAuth(e instanceof Error ? e.message : "Request failed");
+  }
+};
+authForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  authError.textContent = "";
+  try {
+    if (authMode === "register") {
+      await api.register(authEmail.value, authPassword.value);
+      authMode = "verify";
+      showAuth("Check your email, then paste the token here.");
+      return;
+    }
+    if (authMode === "forgot") {
+      await api.forgotPassword(authEmail.value);
+      authMode = "reset";
+      showAuth(
+        "If the account exists, reset instructions were sent. Paste the token and choose a new password.",
+      );
+      return;
+    }
+    if (authMode === "reset") {
+      await api.resetPassword(authEmail.value, authTokenInput.value.trim(), authNewPassword.value);
+      authMode = "login";
+      showAuth("Password updated. Sign in.");
+      return;
+    }
+    if (authMode === "verify") {
+      const verified = await api.verifyEmail(authEmail.value, authTokenInput.value.trim());
+      localStorage.setItem(TOKENS_KEY, JSON.stringify(verified));
+      authToken = verified.accessToken;
+      const registered = await ensureRegistryPeer({
+        api,
+        accessToken: verified.accessToken,
+        storage: localStorage,
+        name: authEmail.value,
+      });
+      registryPeerId = registered.peer.peerId;
+      await connect({ ...registered.mqtt, name: registered.peer.name });
+      return;
+    }
+    const tokens = await api.login(authEmail.value, authPassword.value);
+    localStorage.setItem(TOKENS_KEY, JSON.stringify(tokens));
+    authToken = tokens.accessToken;
+    const registered = await ensureRegistryPeer({
+      api,
+      accessToken: tokens.accessToken,
+      storage: localStorage,
+      name: authEmail.value,
+    });
+    registryPeerId = registered.peer.peerId;
+    await connect({ ...registered.mqtt, name: registered.peer.name });
+  } catch (e) {
+    authToken = null;
+    showAuth(e instanceof Error ? e.message : "Authentication failed");
+  }
+});
+byId<HTMLButtonElement>("logout").onclick = async () => {
+  const tokens = storedTokens();
+  if (tokens) await api.logout(tokens.refreshToken, registryPeerId).catch(() => undefined);
+  localStorage.clear();
+  authToken = null;
+  registryPeerId = undefined;
+  await stopPeer();
+  byId<HTMLButtonElement>("logout").hidden = true;
+  showAuth();
+};
+const authParams = new URLSearchParams(location.search);
+if (
+  authParams.get("auth") === "verify-email" &&
+  authParams.get("email") &&
+  authParams.get("token")
+) {
+  void api
+    .verifyEmail(authParams.get("email")!, authParams.get("token")!)
+    .then(async (tokens) => {
+      localStorage.setItem(TOKENS_KEY, JSON.stringify(tokens));
+      authToken = tokens.accessToken;
+      const registered = await ensureRegistryPeer({
+        api,
+        accessToken: tokens.accessToken,
+        storage: localStorage,
+        name: authParams.get("email")!,
+      });
+      registryPeerId = registered.peer.peerId;
+      history.replaceState({}, "", location.pathname);
+      void connect({ ...registered.mqtt, name: registered.peer.name });
+    })
+    .catch((e) => showAuth(e instanceof Error ? e.message : "Verification failed"));
+} else if (authParams.get("auth") === "reset-password") {
+  authMode = "reset";
+  const email = authParams.get("email") ?? "";
+  authEmail.value = email;
+  authTokenInput.value = authParams.get("token") ?? "";
+  showAuth("Choose a new password.");
+}
 const runtimeConfig: DemoConfig | null =
   runtimeString("url") && runtimeString("username") && runtimeString("password")
     ? {
@@ -482,7 +661,13 @@ const runtimeConfig: DemoConfig | null =
       }
     : null;
 const initialConfig = runtimeConfig ?? loadStoredConfig();
-if (initialConfig) {
+if (authParams.has("auth")) {
+  if (authParams.get("auth") === "reset-password") {
+    showAuth("Choose a new password.");
+  } else if (authParams.get("auth") === "verify-email") {
+    showAuth("Confirm your email token.");
+  }
+} else if (initialConfig) {
   lastConfig = initialConfig;
   if (navigator.onLine) void connect(initialConfig);
   else {
@@ -491,8 +676,31 @@ if (initialConfig) {
     errorBox.textContent =
       "Sei offline. La UI è disponibile dalla cache PWA; la mesh riprenderà quando torni online.";
   }
-} else {
-  showConfigPanel();
+} else if (authParams.get("auth") === "verify-email") {
+  authMode = "verify";
+  authEmail.value = authParams.get("email") ?? "";
+  authTokenInput.value = authParams.get("token") ?? "";
+  showAuth("Confirm your email token.");
+} else if (storedTokens() && !authParams.has("auth")) {
+  const tokens = storedTokens()!;
+  authToken = tokens.accessToken;
+  void ensureRegistryPeer({
+    api,
+    accessToken: tokens.accessToken,
+    storage: localStorage,
+    name: defaultName,
+  })
+    .then((registered) => {
+      registryPeerId = registered.peer.peerId;
+      void connect({ ...registered.mqtt, name: registered.peer.name });
+    })
+    .catch(() => {
+      localStorage.removeItem(TOKENS_KEY);
+      authToken = null;
+      showAuth("Please sign in again.");
+    });
+} else if (!authParams.has("auth")) {
+  showAuth();
 }
 updateOnlineState();
 

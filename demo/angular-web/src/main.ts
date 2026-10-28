@@ -8,14 +8,19 @@ import {
   type MeshPeer,
   type MeshSnapshot,
   type PeerStats,
+  RegistryApi,
+  ensureRegistryPeer,
+  type RegistryTokens,
 } from "@p2plink/demo-mesh";
 import { createBrowserWebRtcEngine } from "@p2plink/webrtc";
 
 const VERSION = "0.2.1",
   KEY = "p2plink-demo-config",
+  TOKENS_KEY = "p2plink-registry-tokens",
+  REGISTRY_URL = "https://p2plink-registry.fvsg.mqu.it",
   DEFAULT_URL = "wss://mqtt-ws.fvsg.it:443/ws",
   DEFAULT_USERNAME = "main:rmq-usr";
-type Config = { url: string; username: string; password: string; name: string };
+type Config = { url: string; username: string; password: string; name: string; clientId?: string };
 interface DemoRuntime {
   url?: unknown;
   username?: unknown;
@@ -71,6 +76,16 @@ class BytesRatePipe implements PipeTransform {
             ⚙️
           </button>
           <button
+            id="logout"
+            class="icon-button"
+            aria-label="Logout"
+            title="Logout"
+            [hidden]="!registrySession()"
+            (click)="logout()"
+          >
+            ⇥
+          </button>
+          <button
             id="reset-stats"
             class="icon-button"
             aria-label="Reset statistiche"
@@ -81,7 +96,39 @@ class BytesRatePipe implements PipeTransform {
           </button>
         </div>
       </section>
-      <section id="config-panel" class="config" [hidden]="!editing()">
+      <section id="auth-panel" class="config" [hidden]="!authVisible()">
+        <form (submit)="authSubmit($event)">
+          <h2>{{ authMode() }}</h2>
+          <p class="muted">P2PLink Registry account</p>
+          <label>Email</label><input name="email" type="email" required [value]="authEmail()" />
+          @if (authMode() === "Login" || authMode() === "Register") {
+            <label>Password (min 12 characters)</label
+            ><input name="password" type="password" minlength="12" required />
+          }
+          @if (authMode() === "Verify email" || authMode() === "Reset password") {
+            <label>Token</label><input name="token" required [value]="authToken()" />
+          }
+          @if (authMode() === "Reset password") {
+            <label>New password (min 12 characters)</label
+            ><input name="newPassword" type="password" minlength="12" required />
+          }
+          <p class="config-error">{{ authError() }}</p>
+          <button>{{ authMode() }}</button>
+        </form>
+        @if (authMode() === "Login") {
+          <p>
+            <button type="button" (click)="setAuthMode('Register')">Register</button>
+            <button type="button" (click)="setAuthMode('Forgot password')">Forgot password</button>
+          </p>
+        }
+        @if (authMode() === "Verify email") {
+          <button type="button" (click)="resendVerification()">Resend verification</button>
+        }
+        @if (authMode() !== "Login") {
+          <button type="button" (click)="setAuthMode('Login')">Back to login</button>
+        }
+      </section>
+      <section id="config-panel" class="config" [hidden]="!editing() || authVisible()">
         <form id="config-form" (submit)="submit($event)">
           <h2>Prima connessione</h2>
           <p class="muted">I dati vengono salvati solo nel localStorage di questo browser.</p>
@@ -228,6 +275,12 @@ class App {
   connected = signal(false);
   online = signal(navigator.onLine);
   editing = signal(true);
+  authVisible = signal(true);
+  authMode = signal("Login");
+  authError = signal("");
+  authEmail = signal("");
+  authToken = signal("");
+  registrySession = signal(false);
   error = signal("");
   identity = signal("Starting…");
   peer: MeshPeer | null = null;
@@ -248,9 +301,21 @@ class App {
       const v = typeof rt?.[key] === "string" ? (rt[key] as string) : appEnv?.[env];
       if (typeof v === "string") this.config[key] = v;
     }
+    const registryOverride =
+      typeof rt?.registryUrl === "string" ? rt.registryUrl : appEnv?.VITE_REGISTRY_URL;
+    this.registryUrl = registryOverride || REGISTRY_URL;
+    const auth = new URLSearchParams(location.search).get("auth");
+    if (auth === "verify-email" || auth === "reset-password") {
+      this.authMode.set(auth === "verify-email" ? "Verify email" : "Reset password");
+      this.authEmail.set(new URLSearchParams(location.search).get("email") ?? "");
+      this.authToken.set(new URLSearchParams(location.search).get("token") ?? "");
+    }
     try {
+      const savedTokens = localStorage.getItem(TOKENS_KEY);
+      if (savedTokens) void this.connectRegistry(JSON.parse(savedTokens) as RegistryTokens);
       const stored = localStorage.getItem(KEY);
       if (stored) {
+        this.authVisible.set(false);
         this.config = { ...this.config, ...JSON.parse(stored) };
         this.editing.set(false);
         if (this.config.url && this.config.username && this.config.password)
@@ -261,10 +326,12 @@ class App {
     }
     if (
       !this.peer &&
+      !localStorage.getItem(KEY) &&
       typeof rt?.url === "string" &&
       typeof rt?.username === "string" &&
       typeof rt?.password === "string"
     ) {
+      this.authVisible.set(false);
       this.editing.set(false);
       this.start(this.config);
     }
@@ -288,11 +355,106 @@ class App {
       setWebRtcEnabled: (v: boolean) => this.peer?.setWebRtcEnabled(v),
     };
   }
+  registryUrl = REGISTRY_URL;
   recentIssues() {
     return (this.snapshot()?.recentIssues ?? []).filter((i) => Date.now() - i.ts < 60000);
   }
   route(p: PeerStats) {
     return p.route === "p2p" ? "🟢 p2p" : p.route === "mqtt" ? "🟡 mqtt" : "⏳ connecting";
+  }
+  setAuthMode(mode: string) {
+    this.authMode.set(mode);
+    this.authError.set("");
+  }
+  async authSubmit(e: Event) {
+    e.preventDefault();
+    const d = new FormData(e.target as HTMLFormElement),
+      email = String(d.get("email")),
+      password = String(d.get("password") ?? ""),
+      token = String(d.get("token") ?? "");
+    this.authEmail.set(email);
+    this.authError.set("");
+    const api = new RegistryApi(this.registryUrl);
+    try {
+      if (this.authMode() === "Register") {
+        await api.register(email, password);
+        this.setAuthMode("Verify email");
+        return;
+      }
+      if (this.authMode() === "Verify email") {
+        const tokens = await api.verifyEmail(email, token);
+        localStorage.setItem(TOKENS_KEY, JSON.stringify(tokens));
+        await this.connectRegistry(tokens);
+        return;
+      }
+      if (this.authMode() === "Forgot password") {
+        await api.forgotPassword(email);
+        this.authError.set("If the account exists, reset instructions were sent.");
+        return;
+      }
+      if (this.authMode() === "Reset password") {
+        await api.resetPassword(email, token, String(d.get("newPassword")));
+        this.setAuthMode("Login");
+        return;
+      }
+      const tokens = await api.login(email, password);
+      localStorage.setItem(TOKENS_KEY, JSON.stringify(tokens));
+      await this.connectRegistry(tokens);
+    } catch (err) {
+      this.authError.set(String(err));
+    }
+  }
+  async resendVerification() {
+    try {
+      await new RegistryApi(this.registryUrl).resendVerification(this.authEmail());
+      this.authError.set("Verification email sent.");
+    } catch (e) {
+      this.authError.set(String(e));
+    }
+  }
+  async connectRegistry(tokens: RegistryTokens) {
+    try {
+      const api = new RegistryApi(this.registryUrl),
+        peer = await ensureRegistryPeer({
+          api,
+          accessToken: tokens.accessToken,
+          storage: localStorage,
+          name: this.config.name,
+        });
+      this.registrySession.set(true);
+      this.authVisible.set(false);
+      this.start({
+        url: peer.mqtt.url,
+        username: peer.mqtt.username,
+        password: peer.mqtt.password,
+        name: peer.peer.name,
+        clientId: peer.mqtt.clientId,
+      });
+    } catch (e) {
+      this.authError.set(String(e));
+      this.authVisible.set(true);
+    }
+  }
+  async logout() {
+    const peerId = this.identity().match(/\\(([^)]+)\\)/)?.[1];
+    try {
+      const raw = localStorage.getItem(TOKENS_KEY);
+      if (raw)
+        await new RegistryApi(this.registryUrl).logout(
+          (JSON.parse(raw) as RegistryTokens).refreshToken,
+          peerId,
+        );
+    } catch {
+      /* local logout proceeds */
+    }
+    localStorage.clear();
+    this.peer?.stop();
+    this.peer = null;
+    this.snapshot.set(null);
+    this.connected.set(false);
+    this.registrySession.set(false);
+    this.authVisible.set(true);
+    this.identity.set("Not connected");
   }
   submit(e: Event) {
     e.preventDefault();
@@ -315,6 +477,7 @@ class App {
       username: c.username,
       password: c.password,
       name: c.name,
+      ...(c.clientId ? { clientId: c.clientId } : {}),
       kind: "browser",
       pingBytes: Number(demoWindow.__P2PLINK_DEMO_CONFIG__?.pingBytes ?? 2048),
       iceServers: demoWindow.__P2PLINK_DEMO_CONFIG__?.iceServers,
@@ -348,6 +511,7 @@ class App {
     this.connected.set(false);
     this.identity.set("Not connected");
     this.editing.set(true);
+    this.authVisible.set(!this.registrySession());
   }
   reset() {
     if (confirm("Azzerare i contatori e le statistiche di tutti i peer?")) this.peer?.resetStats();
