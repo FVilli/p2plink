@@ -169,6 +169,34 @@
           <tbody></tbody>
         </table>
       </div>
+      <details id="ping-config" class="ping-config">
+        <summary>Test banda</summary>
+        <div class="ping-fields">
+          <label for="ping-bytes">Dimensione messaggio (byte)</label>
+          <input id="ping-bytes" type="number" min="1" max="60000" step="1" inputmode="numeric" />
+          <label for="ping-interval">Intervallo ping (ms)</label>
+          <input
+            id="ping-interval"
+            type="number"
+            min="10"
+            max="60000"
+            step="1"
+            inputmode="numeric"
+          />
+          <label for="ping-concurrency">Ping concorrenti</label>
+          <input
+            id="ping-concurrency"
+            type="number"
+            min="1"
+            max="32"
+            step="1"
+            inputmode="numeric"
+          />
+          <button id="ping-apply" type="button">Applica</button>
+          <span id="ping-effective">Valori effettivi: —</span>
+          <p id="ping-status" role="status"></p>
+        </div>
+      </details>
       <section class="issues" id="issues" hidden>
         <h2 class="section-title">🐞 Problemi recenti</h2>
         <ul id="issue-list"></ul>

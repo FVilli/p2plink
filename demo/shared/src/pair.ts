@@ -32,6 +32,7 @@ import type { WebRtcEngine, WebRtcTransport as WebRtcTransportType } from "@p2pl
 import { WebRtcTransport } from "@p2plink/webrtc";
 import { RateMeter } from "./rate.js";
 import { verifyPingPayload } from "./ping.js";
+import { ROUTE_MAX_BYTES, type PingRouter } from "./routing.js";
 import { DEMO_CAPABILITY, DEMO_SERVER_ID, DEMO_TENANT, dataTopic, signalTopic } from "./topics.js";
 import type {
   HandshakeMessage,
@@ -56,10 +57,12 @@ export interface PairContext {
   identity: IdentityKeyPair;
   engine: WebRtcEngine;
   iceServers?: import("@p2plink/core").IceServer[];
-  pingBytes: number;
+  pingConfig: () => import("./types.js").MeshPingConfig;
   pingTimeoutMs: number;
+  transportConfirmTimeoutMs?: number;
   logger: Logger;
   webRtcEnabled: () => boolean;
+  router: PingRouter;
   onChange: () => void;
   reportIssue: (
     level: IssueLevel,
@@ -72,6 +75,7 @@ interface PendingPing {
   id: string;
   envelopeId: string;
   size: number;
+  hash: string;
   sentAt: number;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -97,7 +101,10 @@ export class PairSession {
   private pendingSignalFrames: Uint8Array[] = [];
   private ready = false;
   private closed = false;
-  private inFlight: PendingPing | null = null;
+  private readonly inFlight = new Map<string, PendingPing>();
+  private helloSending = false;
+  private answering: Promise<void> | null = null;
+  private pendingClientHello: { sessionId: string; hello: unknown } | null = null;
   private handshakeTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private webrtcTimer: ReturnType<typeof setTimeout> | null = null;
@@ -139,8 +146,8 @@ export class PairSession {
       this.ready &&
       !this.closed &&
       this.manager &&
-      !this.inFlight &&
-      this.manager.getSnapshot().transport !== null,
+      this.inFlight.size < this.ctx.pingConfig().concurrency &&
+      (this.manager.getSnapshot().transport !== null || this.ctx.router.hasCandidates(this.peerId)),
     );
   }
 
@@ -156,7 +163,8 @@ export class PairSession {
   }
 
   private async startHandshake(): Promise<void> {
-    if (this.closed || this.ready || this.role !== "initiator") return;
+    if (this.closed || this.ready || this.role !== "initiator" || this.helloSending) return;
+    this.helloSending = true;
     this.clearTimer("handshake");
     this.clearTimer("retry");
     try {
@@ -181,6 +189,8 @@ export class PairSession {
       }, HANDSHAKE_TIMEOUT_MS);
     } catch (error) {
       this.failHandshake(P2PLinkError.from(error).message);
+    } finally {
+      this.helloSending = false;
     }
   }
 
@@ -197,56 +207,24 @@ export class PairSession {
 
     if (kind === "client-hello") {
       if (this.role !== "responder") return;
-      const clientHello = hello as {
-        clientId?: unknown;
-        sessionId?: unknown;
-        identityPublicKey?: JsonWebKey;
-      };
-      if (clientHello.clientId !== this.remote.peerId) {
-        this.lastError = "client id mismatch";
-        this.ctx.onChange();
-        return;
-      }
-      if (clientHello.sessionId !== message.sessionId) return;
-      if (this.manager) {
+      if (this.answering) {
         if (this.sessionId === message.sessionId) {
-          if (this.lastServerHello) await this.publishHandshake(this.lastServerHello);
-          return;
+          await this.answering;
+          if (this.sessionId === message.sessionId && this.lastServerHello) {
+            await this.publishHandshake(this.lastServerHello);
+          }
+        } else {
+          // Dropping a new session hello here can leave its initiator connecting forever.
+          this.pendingClientHello = { sessionId: message.sessionId, hello };
         }
-        await this.resetSession();
-      }
-      this.sessionToken += 1;
-      const token = this.sessionToken;
-      const expected = await publicKeyFingerprint(this.remote.identityPublicKey);
-      const received = clientHello.identityPublicKey
-        ? await publicKeyFingerprint(clientHello.identityPublicKey)
-        : null;
-      if (received !== expected) {
-        this.lastError = "identity key mismatch";
-        this.ctx.onChange();
         return;
       }
+      this.pendingClientHello = { sessionId: message.sessionId, hello };
+      this.answering = this.drainClientHellos();
       try {
-        this.sessionId = message.sessionId;
-        this.serverState = await verifyClientHello(hello, {
-          tenant: DEMO_TENANT,
-          serverId: DEMO_SERVER_ID,
-          validateCapability: async () => ({
-            clientId: this.remote.peerId,
-            subject: this.remote.peerId,
-            identityFingerprint: expected,
-          }),
-        });
-        const { hello: serverHello, state } = await createServerHello(
-          this.serverState,
-          this.ctx.identity,
-        );
-        this.lastServerHello = serverHello;
-        await this.publishHandshake(serverHello);
-        const derived = await completeServerHandshake(state);
-        await this.createReady(derived, "server", token);
-      } catch (error) {
-        this.failHandshake(P2PLinkError.from(error).message);
+        await this.answering;
+      } finally {
+        this.answering = null;
       }
       return;
     }
@@ -262,6 +240,69 @@ export class PairSession {
       } catch (error) {
         this.failHandshake(P2PLinkError.from(error).message);
       }
+    }
+  }
+
+  private async drainClientHellos(): Promise<void> {
+    while (!this.closed && this.pendingClientHello) {
+      const pending = this.pendingClientHello;
+      this.pendingClientHello = null;
+      await this.answerClientHello(pending.sessionId, pending.hello);
+    }
+  }
+
+  private async answerClientHello(sessionId: string, hello: unknown): Promise<void> {
+    const clientHello = hello as {
+      clientId?: unknown;
+      sessionId?: unknown;
+      identityPublicKey?: JsonWebKey;
+    };
+    if (clientHello.clientId !== this.remote.peerId) {
+      this.lastError = "client id mismatch";
+      this.ctx.onChange();
+      return;
+    }
+    if (clientHello.sessionId !== sessionId) return;
+    if (this.manager) {
+      if (this.sessionId === sessionId) {
+        if (this.lastServerHello) await this.publishHandshake(this.lastServerHello);
+        return;
+      }
+      await this.resetSession();
+    }
+    this.sessionToken += 1;
+    const token = this.sessionToken;
+    this.lastError = null;
+    const expected = await publicKeyFingerprint(this.remote.identityPublicKey);
+    const received = clientHello.identityPublicKey
+      ? await publicKeyFingerprint(clientHello.identityPublicKey)
+      : null;
+    if (received !== expected) {
+      this.lastError = "identity key mismatch";
+      this.ctx.onChange();
+      return;
+    }
+    try {
+      this.sessionId = sessionId;
+      this.serverState = await verifyClientHello(hello, {
+        tenant: DEMO_TENANT,
+        serverId: DEMO_SERVER_ID,
+        validateCapability: async () => ({
+          clientId: this.remote.peerId,
+          subject: this.remote.peerId,
+          identityFingerprint: expected,
+        }),
+      });
+      const { hello: serverHello, state } = await createServerHello(
+        this.serverState,
+        this.ctx.identity,
+      );
+      this.lastServerHello = serverHello;
+      await this.publishHandshake(serverHello);
+      const derived = await completeServerHandshake(state);
+      await this.createReady(derived, "server", token);
+    } catch (error) {
+      this.failHandshake(P2PLinkError.from(error).message);
     }
   }
 
@@ -336,8 +377,15 @@ export class PairSession {
     });
     manager.start();
     try {
-      await manager.waitForConfirmedTransport(10_000, "mqtt");
+      await manager.waitForConfirmedTransport(this.ctx.transportConfirmTimeoutMs ?? 10_000, "mqtt");
     } catch (error) {
+      // A stale confirmation failure must not tear down a newer session.
+      if (this.closed || this.sessionToken !== token || this.manager !== manager) {
+        this.ctx.logger.debug("stale transport confirmation ignored", {
+          peerId: this.remote.peerId,
+        });
+        return;
+      }
       this.lastError = P2PLinkError.from(error).message;
       this.ctx.logger.warn("pair transport not ready", {
         peerId: this.remote.peerId,
@@ -347,11 +395,14 @@ export class PairSession {
         peerId: this.remote.peerId,
         error: this.lastError,
       });
+      await this.resetSession();
       if (this.role === "initiator") this.scheduleRecovery();
-      else this.close("transport not ready");
       return;
     }
-    if (this.closed) return;
+    // Prevent a replaced session from becoming ready. Today this is defensive: resetSession stops
+    // the manager and rejects pending confirmations, and manager cannot be replaced without reset.
+    // Keep this and the stale-failure check below if resetSession or waitForConfirmedTransport changes.
+    if (this.closed || this.sessionToken !== token || this.manager !== manager) return;
     this.ready = true;
     this.lastError = null;
     this.ctx.logger.info("pair ready", {
@@ -421,6 +472,14 @@ export class PairSession {
       }
       return;
     }
+    if (envelope.type === "event") {
+      if (transport === "webrtc") {
+        void this.ctx.router.receive(this.peerId, envelope.payload).catch((error: unknown) => {
+          this.ctx.logger.debug("ping route rejected", { error: P2PLinkError.from(error).message });
+        });
+      }
+      return;
+    }
     if (envelope.type === "request") {
       void this.handlePingRequest(envelope, transport);
       return;
@@ -432,47 +491,77 @@ export class PairSession {
 
   async sendPing(): Promise<void> {
     if (!this.canPing() || !this.manager) return;
-    const bytes = randomBytes(this.ctx.pingBytes);
+    const manager = this.manager;
+    const config = this.ctx.pingConfig();
+    const bytes = randomBytes(config.bytes);
     const id = randomToken(8);
-    const hash = await sha256Base64Url(bytes);
-    const payload = {
+    const envelope = createEnvelope("request", this.sessionId, {
       method: "demo.ping",
-      params: {
-        kind: "ping",
-        id,
-        size: bytes.length,
-        bytes: toBase64Url(bytes),
-        hash,
-      },
-    };
-    const envelope = createEnvelope("request", this.sessionId, payload);
+      params: { kind: "ping", id, size: bytes.length, bytes: toBase64Url(bytes), hash: "" },
+    });
     const sentAt = Date.now();
     const timer = setTimeout(() => {
-      if (this.inFlight?.id !== id) return;
-      this.inFlight = null;
-      this.lastError = "ping timeout";
+      this.releasePing(id);
+      this.lastError = "OUTCOME_UNKNOWN: ping timeout";
       this.ctx.onChange();
     }, this.ctx.pingTimeoutMs);
     timer.unref?.();
-    this.inFlight = { id, envelopeId: envelope.id, size: bytes.length, sentAt, timer };
+    this.inFlight.set(id, {
+      id,
+      envelopeId: envelope.id,
+      size: bytes.length,
+      hash: "",
+      sentAt,
+      timer,
+    });
+    let relay: string | null = null;
     try {
-      const kind = await this.manager.send(envelope);
-      this.meter.addTx(kind, bytes.length);
-      this.pings += 1;
-      this.lastPingAt = sentAt;
+      relay = this.isDirectP2P() ? null : await this.ctx.router.findRelay(this.peerId);
+      if (this.closed || this.manager !== manager) {
+        this.releasePing(id);
+        return;
+      }
+      const hash = await sha256Base64Url(bytes);
+      const payload = {
+        method: "demo.ping",
+        params: { kind: "ping", id, size: bytes.length, bytes: toBase64Url(bytes), hash },
+      };
+      const request = createEnvelope("request", this.sessionId, payload);
+      const pending = this.inFlight.get(id);
+      if (!pending) return;
+      pending.envelopeId = request.id;
+      pending.hash = hash;
+      if (relay) {
+        this.meter.addTx("webrtc", bytes.length);
+        this.pings += 1;
+        this.lastPingAt = sentAt;
+        const pong = await this.ctx.router.ping(this, relay, request, this.ctx.pingTimeoutMs);
+        await this.handlePingResponse(pong, "webrtc");
+      } else {
+        const via = this.isDirectP2P() ? "webrtc" : "mqtt";
+        const kind = await manager.send(request, { via });
+        this.meter.addTx(kind, bytes.length);
+        this.pings += 1;
+        this.lastPingAt = sentAt;
+      }
       this.ctx.onChange();
     } catch (error) {
-      if (this.inFlight?.id === id) {
-        clearTimeout(timer);
-        this.inFlight = null;
-      }
+      this.releasePing(id);
       this.lastError = P2PLinkError.from(error).message;
-      this.ctx.reportIssue("warn", "ping send failed", {
-        peerId: this.remote.peerId,
-        error: this.lastError,
-      });
+      if (!relay)
+        this.ctx.reportIssue("warn", "ping send failed", {
+          peerId: this.remote.peerId,
+          error: this.lastError,
+        });
       this.ctx.onChange();
     }
+  }
+
+  private releasePing(id: string): void {
+    const pending = this.inFlight.get(id);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.inFlight.delete(id);
   }
 
   private async handlePingRequest(
@@ -549,8 +638,8 @@ export class PairSession {
     envelope: ReturnType<typeof createEnvelope>,
     transport: TransportKind,
   ): Promise<void> {
-    const pending = this.inFlight;
-    if (!pending || envelope.cid !== pending.envelopeId) return;
+    const pending = [...this.inFlight.values()].find((item) => envelope.cid === item.envelopeId);
+    if (!pending) return;
     const payload = envelope.payload as {
       kind?: unknown;
       id?: unknown;
@@ -561,8 +650,7 @@ export class PairSession {
       size?: unknown;
     } | null;
     if (payload?.kind !== "pong" || payload.id !== pending.id) return;
-    clearTimeout(pending.timer);
-    this.inFlight = null;
+    this.releasePing(pending.id);
     if (payload.ok !== true) {
       this.lastError = typeof payload.error === "string" ? payload.error : "pong rejected";
       this.ctx.onChange();
@@ -576,7 +664,7 @@ export class PairSession {
       if (bytes.length !== expectedSize || bytes.length !== pending.size) {
         throw new Error("response size mismatch");
       }
-      if ((await sha256Base64Url(bytes)) !== hash) {
+      if (hash !== pending.hash || (await sha256Base64Url(bytes)) !== hash) {
         throw new Error("response hash mismatch");
       }
       this.meter.addRx(transport, bytes.length);
@@ -587,6 +675,71 @@ export class PairSession {
       this.lastError = P2PLinkError.from(error).message;
     }
     this.ctx.onChange();
+  }
+
+  isDirectP2P(): boolean {
+    return this.isReady && this.manager?.getSnapshot().transport === "webrtc";
+  }
+
+  async sendRouteEvent(payload: unknown): Promise<void> {
+    if (!this.isDirectP2P() || !this.manager) throw new Error("route hop unavailable");
+    await this.manager.send(createEnvelope("event", this.sessionId, payload), { via: "webrtc" });
+  }
+
+  async sealRoutedPing(envelope: ReturnType<typeof createEnvelope>): Promise<string> {
+    if (!this.isReady || !this.security || envelope.sid !== this.sessionId)
+      throw new Error("route session unavailable");
+    const frame = await this.security.seal(
+      "mqtt",
+      encodeEnvelopeJson(envelope, ROUTE_MAX_BYTES - 38),
+    );
+    return toBase64Url(frame);
+  }
+
+  async openRoutedPing(frame: string): Promise<ReturnType<typeof createEnvelope>> {
+    if (!this.isReady || !this.security || frame.length > Math.ceil((ROUTE_MAX_BYTES * 4) / 3))
+      throw new Error("invalid route frame");
+    const bytes = fromBase64Url(frame);
+    if (bytes.length > ROUTE_MAX_BYTES) throw new Error("route frame too large");
+    const envelope = decodeEnvelopeJson(await this.security.open("mqtt", bytes), ROUTE_MAX_BYTES);
+    if (envelope.sid !== this.sessionId) throw new Error("route session mismatch");
+    return envelope;
+  }
+
+  async answerRoutedPing(
+    envelope: ReturnType<typeof createEnvelope>,
+  ): Promise<ReturnType<typeof createEnvelope>> {
+    const payload = envelope.payload as {
+      method?: unknown;
+      params?: { kind?: unknown; id?: unknown; size?: unknown; bytes?: unknown; hash?: unknown };
+    };
+    const params = payload.params;
+    if (
+      payload.method !== "demo.ping" ||
+      params?.kind !== "ping" ||
+      typeof params.id !== "string" ||
+      typeof params.size !== "number" ||
+      params.size < 1 ||
+      params.size > 60_000
+    )
+      throw new Error("invalid routed ping");
+    const bytes = await verifyPingPayload(params);
+    if (!bytes) throw new Error("routed ping integrity failure");
+    this.meter.addRx("webrtc", bytes.length);
+    this.meter.addTx("webrtc", bytes.length);
+    return createEnvelope(
+      "response",
+      this.sessionId,
+      {
+        kind: "pong",
+        id: params.id,
+        ok: true,
+        size: bytes.length,
+        bytes: params.bytes,
+        hash: params.hash,
+      },
+      { cid: envelope.id },
+    );
   }
 
   private async startWebRtc(): Promise<void> {
@@ -708,16 +861,16 @@ export class PairSession {
   }
 
   private async resetSession(): Promise<void> {
+    // A transport failure for the active hello must not discard a newer hello queued meanwhile.
     this.clearTimer("recovery");
     this.ready = false;
     this.lastServerHello = null;
     this.clientState = null;
     this.serverState = null;
     this.pendingSignals.length = 0;
-    if (this.inFlight) {
-      clearTimeout(this.inFlight.timer);
-      this.inFlight = null;
-    }
+    this.pendingSignalFrames.length = 0;
+    for (const pending of this.inFlight.values()) clearTimeout(pending.timer);
+    this.inFlight.clear();
     const webrtc = this.webrtc;
     this.webrtc = null;
     if (webrtc) await webrtc.close("session-replaced");
@@ -732,15 +885,14 @@ export class PairSession {
   close(reason = "closed"): void {
     if (this.closed) return;
     this.closed = true;
+    this.pendingClientHello = null;
     this.ready = false;
     this.clearTimer("handshake");
     this.clearTimer("retry");
     this.clearTimer("webrtc");
     this.clearTimer("recovery");
-    if (this.inFlight) {
-      clearTimeout(this.inFlight.timer);
-      this.inFlight = null;
-    }
+    for (const pending of this.inFlight.values()) clearTimeout(pending.timer);
+    this.inFlight.clear();
     const webrtc = this.webrtc;
     this.webrtc = null;
     if (webrtc) void webrtc.close(reason);

@@ -51,6 +51,7 @@ export class RateMeter {
   private traffic = emptyTraffic();
   private samples: Sample[] = [];
   private readonly windowMs: number;
+  private lastSampleAt = 0;
 
   constructor(windowMs = 2_000) {
     this.windowMs = windowMs;
@@ -69,11 +70,15 @@ export class RateMeter {
     const count = this.traffic[direction][kind];
     count.messages += 1;
     count.bytes += Math.max(0, bytes);
-    this.samples.push({
-      at: Date.now(),
-      p2p: this.traffic.tx.p2p.bytes + this.traffic.rx.p2p.bytes,
-      mqtt: this.traffic.tx.mqtt.bytes + this.traffic.rx.mqtt.bytes,
-    });
+    const now = Date.now();
+    if (now - this.lastSampleAt >= 75) {
+      this.lastSampleAt = now;
+      this.samples.push({
+        at: now,
+        p2p: this.traffic.tx.p2p.bytes + this.traffic.rx.p2p.bytes,
+        mqtt: this.traffic.tx.mqtt.bytes + this.traffic.rx.mqtt.bytes,
+      });
+    }
     const cutoff = Date.now() - this.windowMs * 3;
     while (this.samples.length > 0 && this.samples[0]!.at < cutoff) this.samples.shift();
   }
@@ -81,6 +86,7 @@ export class RateMeter {
   reset(): void {
     this.traffic = emptyTraffic();
     this.samples = [];
+    this.lastSampleAt = 0;
   }
 
   snapshot(now = Date.now()): RateSnapshot {

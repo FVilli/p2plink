@@ -33,7 +33,41 @@ const runtimeString = (key: string) =>
   typeof runtime?.[key] === "string" ? (runtime[key] as string) : undefined;
 const defaultName =
   runtimeString("name") ?? env.VITE_PEER_NAME ?? `browser-${crypto.randomUUID().slice(0, 8)}`;
-const pingBytes = Number(runtime?.pingBytes ?? env.VITE_PING_BYTES ?? 2048);
+type MeshPingConfig = { bytes: number; intervalMs: number; concurrency: number };
+const PING_KEY = "p2plink.ping.v1";
+const validPingField = (value: number, min: number, max: number) =>
+  Number.isInteger(value) && value >= min && value <= max;
+const pingDefaults: MeshPingConfig = {
+  bytes: (() => {
+    const value = Number(runtime?.pingBytes ?? env.VITE_PING_BYTES ?? 2048);
+    return validPingField(value, 1, 60000) ? value : 2048;
+  })(),
+  intervalMs: 250,
+  concurrency: 1,
+};
+const validPingConfig = (value: unknown): value is MeshPingConfig => {
+  if (!value || typeof value !== "object") return false;
+  const config = value as Partial<MeshPingConfig>;
+  return (
+    Number.isInteger(config.bytes) &&
+    config.bytes! >= 1 &&
+    config.bytes! <= 60000 &&
+    Number.isInteger(config.intervalMs) &&
+    config.intervalMs! >= 10 &&
+    config.intervalMs! <= 60000 &&
+    Number.isInteger(config.concurrency) &&
+    config.concurrency! >= 1 &&
+    config.concurrency! <= 32
+  );
+};
+const loadPingConfig = (): MeshPingConfig => {
+  try {
+    const value = JSON.parse(localStorage.getItem(PING_KEY) || "null");
+    return validPingConfig(value) ? value : pingDefaults;
+  } catch {
+    return pingDefaults;
+  }
+};
 const iceServers = Array.isArray(runtime?.iceServers)
   ? (runtime.iceServers as { urls: string | string[] }[])
   : env.VITE_STUN_URLS
@@ -76,6 +110,9 @@ const issueContext = (extra: Record<string, string | number | boolean> = {}) => 
 export default function App() {
   const [passwordVisible, setPasswordVisible] = useState<Record<string, boolean>>({});
   const [snapshot, setSnapshot] = useState<MeshSnapshot | null>(null);
+  const [pingConfig, setPingConfig] = useState<MeshPingConfig>(loadPingConfig);
+  const [pingInputs, setPingInputs] = useState<MeshPingConfig>(loadPingConfig);
+  const [pingStatus, setPingStatus] = useState("");
   const [tokens, setTokens] = useState<RegistryTokens | null>(() => {
     const accessToken = localStorage.getItem(ACCESS_KEY),
       refreshToken = localStorage.getItem(REFRESH_KEY);
@@ -177,7 +214,9 @@ export default function App() {
         ...(c.clientId ? { clientId: c.clientId } : {}),
         ...(c.peerId ? { peerId: c.peerId } : {}),
         kind: "browser",
-        pingBytes,
+        pingBytes: pingConfig.bytes,
+        pingIntervalMs: pingConfig.intervalMs,
+        pingConcurrency: pingConfig.concurrency,
         version: __APP_VERSION__,
         platform: navigator.userAgent,
         presenceIntervalMs: 30000,
@@ -219,6 +258,36 @@ export default function App() {
       );
       setPeer(null);
       await mesh.stop().catch(() => undefined);
+    }
+  }
+  function applyPingConfig() {
+    const next = {
+      bytes: Number(pingInputs.bytes),
+      intervalMs: Number(pingInputs.intervalMs),
+      concurrency: Number(pingInputs.concurrency),
+    };
+    if (!validPingConfig(next)) {
+      setPingStatus("Inserisci interi validi nei range indicati.");
+      setPingInputs(snapshot?.ping ?? pingConfig);
+      return;
+    }
+    try {
+      const effective = peer && snapshot?.brokerConnected ? peer.setPingConfig(next) : next;
+      setPingConfig(effective);
+      setPingInputs(effective);
+      try {
+        localStorage.setItem(PING_KEY, JSON.stringify(effective));
+      } catch {
+        /* Storage unavailable. */
+      }
+      setPingStatus(
+        peer && snapshot?.brokerConnected
+          ? "Configurazione applicata."
+          : "Salvata per la prossima connessione.",
+      );
+    } catch (e) {
+      setPingStatus(e instanceof Error ? e.message : String(e));
+      setPingInputs(peer?.getPingConfig() ?? pingConfig);
     }
   }
   async function authenticate(e: React.FormEvent<HTMLFormElement>) {
@@ -640,6 +709,68 @@ export default function App() {
             </div>
           ))}
         </section>
+        <details className="ping-config">
+          <summary>Test banda</summary>
+          <div className="ping-fields">
+            <label htmlFor="ping-bytes">Dimensione messaggio (byte)</label>
+            <input
+              id="ping-bytes"
+              type="number"
+              min={1}
+              max={60000}
+              step={1}
+              inputMode="numeric"
+              value={pingInputs.bytes}
+              onChange={(e) =>
+                setPingInputs((v: MeshPingConfig) => ({
+                  ...v,
+                  bytes: e.currentTarget.valueAsNumber,
+                }))
+              }
+            />
+            <label htmlFor="ping-interval">Intervallo ping (ms)</label>
+            <input
+              id="ping-interval"
+              type="number"
+              min={10}
+              max={60000}
+              step={1}
+              inputMode="numeric"
+              value={pingInputs.intervalMs}
+              onChange={(e) =>
+                setPingInputs((v: MeshPingConfig) => ({
+                  ...v,
+                  intervalMs: e.currentTarget.valueAsNumber,
+                }))
+              }
+            />
+            <label htmlFor="ping-concurrency">Ping concorrenti</label>
+            <input
+              id="ping-concurrency"
+              type="number"
+              min={1}
+              max={32}
+              step={1}
+              inputMode="numeric"
+              value={pingInputs.concurrency}
+              onChange={(e) =>
+                setPingInputs((v: MeshPingConfig) => ({
+                  ...v,
+                  concurrency: e.currentTarget.valueAsNumber,
+                }))
+              }
+            />
+            <button type="button" onClick={applyPingConfig}>
+              Applica
+            </button>
+            <span>
+              Valori effettivi: {snapshot?.ping.bytes ?? pingConfig.bytes} byte,{" "}
+              {snapshot?.ping.intervalMs ?? pingConfig.intervalMs} ms,{" "}
+              {snapshot?.ping.concurrency ?? pingConfig.concurrency} concorrenti
+            </span>
+            <p role="status">{pingStatus}</p>
+          </div>
+        </details>
         <h2 className="section-title">🔗 Connected peers</h2>
         <div className="table-wrap">
           <table id="peers">

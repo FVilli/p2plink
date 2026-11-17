@@ -22,6 +22,43 @@ const VERSION = "0.2.3",
   REGISTRY_URL = "https://p2plink-registry.fvsg.mqu.it",
   DEFAULT_URL = "wss://mqtt-ws.fvsg.it:443/ws",
   DEFAULT_USERNAME = "main:rmq-usr";
+type MeshPingConfig = { bytes: number; intervalMs: number; concurrency: number };
+const PING_KEY = "p2plink.ping.v1";
+const validPingField = (value: number, min: number, max: number) =>
+  Number.isInteger(value) && value >= min && value <= max;
+const runtimePingDefaults = (): MeshPingConfig => {
+  const value = Number(
+    demoWindow.__P2PLINK_DEMO_CONFIG__?.pingBytes ?? appEnv?.VITE_PING_BYTES ?? 2048,
+  );
+  return {
+    bytes: validPingField(value, 1, 60000) ? value : 2048,
+    intervalMs: 250,
+    concurrency: 1,
+  };
+};
+const validPing = (value: unknown): value is MeshPingConfig => {
+  if (!value || typeof value !== "object") return false;
+  const p = value as MeshPingConfig;
+  return (
+    Number.isInteger(p.bytes) &&
+    p.bytes >= 1 &&
+    p.bytes <= 60000 &&
+    Number.isInteger(p.intervalMs) &&
+    p.intervalMs >= 10 &&
+    p.intervalMs <= 60000 &&
+    Number.isInteger(p.concurrency) &&
+    p.concurrency >= 1 &&
+    p.concurrency <= 32
+  );
+};
+const loadPingPreference = (): MeshPingConfig => {
+  try {
+    const value = JSON.parse(localStorage.getItem(PING_KEY) || "null");
+    return validPing(value) ? value : runtimePingDefaults();
+  } catch {
+    return runtimePingDefaults();
+  }
+};
 type Config = {
   url: string;
   username: string;
@@ -252,6 +289,51 @@ class BytesRatePipe implements PipeTransform {
           }
         </div>
       </section>
+      <details class="ping-config">
+        <summary>Test banda</summary>
+        <div class="ping-fields">
+          <label for="ping-bytes">Dimensione messaggio (byte)</label>
+          <input
+            id="ping-bytes"
+            type="number"
+            min="1"
+            max="60000"
+            step="1"
+            inputmode="numeric"
+            [value]="pingInputs().bytes"
+            (input)="updatePingInput('bytes', $event)"
+          />
+          <label for="ping-interval">Intervallo ping (ms)</label>
+          <input
+            id="ping-interval"
+            type="number"
+            min="10"
+            max="60000"
+            step="1"
+            inputmode="numeric"
+            [value]="pingInputs().intervalMs"
+            (input)="updatePingInput('intervalMs', $event)"
+          />
+          <label for="ping-concurrency">Ping concorrenti</label>
+          <input
+            id="ping-concurrency"
+            type="number"
+            min="1"
+            max="32"
+            step="1"
+            inputmode="numeric"
+            [value]="pingInputs().concurrency"
+            (input)="updatePingInput('concurrency', $event)"
+          />
+          <button type="button" (click)="applyPingConfig()">Applica</button>
+          <span
+            >Valori effettivi: {{ snapshot()?.ping?.bytes ?? pingPreference.bytes }} byte,
+            {{ snapshot()?.ping?.intervalMs ?? pingPreference.intervalMs }} ms,
+            {{ snapshot()?.ping?.concurrency ?? pingPreference.concurrency }} concorrenti</span
+          >
+          <p role="status">{{ pingStatus() }}</p>
+        </div>
+      </details>
       <h2 class="section-title">🔗 Connected peers</h2>
       <div class="table-wrap">
         <table id="peers">
@@ -344,7 +426,40 @@ class App {
     "Last error",
   ];
   snapshot = signal<MeshSnapshot | null>(null);
+  pingPreference = loadPingPreference();
+  pingInputs = signal<MeshPingConfig>({ ...this.pingPreference });
+  pingStatus = signal("");
   connected = signal(false);
+  updatePingInput(key: keyof MeshPingConfig, event: Event) {
+    this.pingInputs.update((current) => ({
+      ...current,
+      [key]: (event.target as HTMLInputElement).valueAsNumber,
+    }));
+  }
+  applyPingConfig() {
+    const next = this.pingInputs();
+    if (!validPing(next)) {
+      this.pingStatus.set("Inserisci interi validi nei range indicati.");
+      this.pingInputs.set(this.peer?.getPingConfig() ?? this.pingPreference);
+      return;
+    }
+    try {
+      const effective = this.connected() && this.peer ? this.peer.setPingConfig(next) : next;
+      this.pingPreference = effective;
+      this.pingInputs.set(effective);
+      try {
+        localStorage.setItem(PING_KEY, JSON.stringify(effective));
+      } catch {
+        /* Storage unavailable. */
+      }
+      this.pingStatus.set(
+        this.connected() ? "Configurazione applicata." : "Salvata per la prossima connessione.",
+      );
+    } catch (error) {
+      this.pingStatus.set(error instanceof Error ? error.message : String(error));
+      this.pingInputs.set(this.peer?.getPingConfig() ?? this.pingPreference);
+    }
+  }
   online = signal(navigator.onLine);
   authVisible = signal(true);
   brokerUrl = signal("");
@@ -553,7 +668,9 @@ class App {
       ...(c.clientId ? { clientId: c.clientId } : {}),
       ...(c.peerId ? { peerId: c.peerId } : {}),
       kind: "browser",
-      pingBytes: Number(demoWindow.__P2PLINK_DEMO_CONFIG__?.pingBytes ?? 2048),
+      pingBytes: this.pingPreference.bytes,
+      pingIntervalMs: this.pingPreference.intervalMs,
+      pingConcurrency: this.pingPreference.concurrency,
       iceServers: demoWindow.__P2PLINK_DEMO_CONFIG__?.iceServers,
       version: VERSION,
       presenceIntervalMs: 30000,

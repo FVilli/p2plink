@@ -2,6 +2,8 @@ import { P2PLinkError, P2PLinkErrorCodes, type Logger, type Unsubscribe } from "
 import { generateIdentity, publicKeyFingerprint, validatePublicJwk } from "@p2plink/crypto";
 import { MqttConnection } from "@p2plink/mqtt";
 import { PairSession } from "./pair.js";
+import { PingRouter } from "./routing.js";
+import { selectPingPeers } from "./ping-scheduler.js";
 import {
   DEMO_PROTOCOL_VERSION,
   issueTopic,
@@ -21,6 +23,7 @@ import type {
   MeshIssue,
   MeshPeer,
   MeshPeerConfig,
+  MeshPingConfig,
   MeshSnapshot,
   PeerKind,
   PeerStats,
@@ -49,6 +52,7 @@ class MeshImpl implements MeshPeer {
   private connection: MqttConnection | null = null;
   private readonly peers = new Map<string, RemotePeer>();
   private readonly pairs = new Map<string, PairSession>();
+  private readonly router: PingRouter;
   private readonly listeners = new Set<(snapshot: MeshSnapshot) => void>();
   private readonly recentIssues: MeshIssue[] = [];
   private readonly issueIds = new Set<string>();
@@ -57,6 +61,8 @@ class MeshImpl implements MeshPeer {
   private stopped = false;
   private webRtcEnabled: boolean;
   private pingCursor = 0;
+  private pingConfig: MeshPingConfig;
+  private readonly lastPingAt = new Map<string, number>();
   private presenceTimer: ReturnType<typeof setInterval> | null = null;
   private pruneTimer: ReturnType<typeof setInterval> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -65,7 +71,13 @@ class MeshImpl implements MeshPeer {
 
   constructor(config: MeshPeerConfig) {
     this.config = config;
+    this.pingConfig = {
+      bytes: config.pingBytes ?? 2048,
+      intervalMs: config.pingIntervalMs ?? 250,
+      concurrency: config.pingConcurrency ?? 1,
+    };
     this.peerId = config.peerId ?? newPeerId();
+    this.router = new PingRouter(this.peerId, () => this.pairs.values());
     this.version = config.version ?? "0.0.0";
     this.logger = config.logger ?? consoleLogger;
     this.webRtcEnabled = !config.disableWebRtc;
@@ -73,6 +85,7 @@ class MeshImpl implements MeshPeer {
       self: { peerId: this.peerId, name: config.name, kind: config.kind, version: this.version },
       brokerConnected: false,
       webRtcEnabled: this.webRtcEnabled,
+      ping: { ...this.pingConfig },
       peers: [],
       totals: {
         peers: 0,
@@ -92,14 +105,17 @@ class MeshImpl implements MeshPeer {
   async start(): Promise<void> {
     if (this.started) return;
     if (
-      !Number.isInteger(this.config.pingBytes) ||
-      this.config.pingBytes < 1 ||
-      this.config.pingBytes > MAX_PING_BYTES
+      !Number.isInteger(this.pingConfig.bytes) ||
+      this.pingConfig.bytes < 1 ||
+      this.pingConfig.bytes > MAX_PING_BYTES ||
+      !Number.isInteger(this.pingConfig.intervalMs) ||
+      this.pingConfig.intervalMs < 10 ||
+      this.pingConfig.intervalMs > 60_000 ||
+      !Number.isInteger(this.pingConfig.concurrency) ||
+      this.pingConfig.concurrency < 1 ||
+      this.pingConfig.concurrency > 32
     ) {
-      throw new P2PLinkError(
-        P2PLinkErrorCodes.INVALID_CONFIG,
-        `pingBytes must be between 1 and ${MAX_PING_BYTES}`,
-      );
+      throw new P2PLinkError(P2PLinkErrorCodes.INVALID_CONFIG, `invalid ping configuration`);
     }
     this.identity = await generateIdentity(this.peerId);
     const connection = new MqttConnection({
@@ -176,7 +192,7 @@ class MeshImpl implements MeshPeer {
     }, 2_000);
     this.pingTimer = setInterval(() => {
       this.pingNextPeer();
-    }, this.config.pingIntervalMs ?? 250);
+    }, 25);
     this.statsTimer = setInterval(() => {
       this.emitSnapshot();
     }, 500);
@@ -189,7 +205,7 @@ class MeshImpl implements MeshPeer {
       name: this.config.name,
       kind: this.config.kind,
       version: this.version,
-      pingBytes: this.config.pingBytes,
+      pingConfig: () => ({ ...this.pingConfig }),
       presenceIntervalMs: presenceInterval,
     });
     this.emitSnapshot();
@@ -222,6 +238,8 @@ class MeshImpl implements MeshPeer {
     for (const pair of this.pairs.values()) pair.close("mesh-stop");
     this.pairs.clear();
     this.peers.clear();
+    this.lastPingAt.clear();
+    this.pingCursor = 0;
     await this.connection?.close();
     this.connection = null;
     this.emitSnapshot();
@@ -241,6 +259,30 @@ class MeshImpl implements MeshPeer {
     this.webRtcEnabled = enabled;
     for (const pair of this.pairs.values()) pair.setWebRtcEnabled(enabled);
     this.emitSnapshot();
+  }
+
+  getPingConfig(): MeshPingConfig {
+    return { ...this.pingConfig };
+  }
+
+  setPingConfig(next: Partial<MeshPingConfig>): MeshPingConfig {
+    const candidate = { ...this.pingConfig, ...next };
+    if (
+      !Number.isInteger(candidate.bytes) ||
+      candidate.bytes < 1 ||
+      candidate.bytes > MAX_PING_BYTES ||
+      !Number.isInteger(candidate.intervalMs) ||
+      candidate.intervalMs < 10 ||
+      candidate.intervalMs > 60_000 ||
+      !Number.isInteger(candidate.concurrency) ||
+      candidate.concurrency < 1 ||
+      candidate.concurrency > 32
+    ) {
+      throw new P2PLinkError(P2PLinkErrorCodes.INVALID_CONFIG, "invalid ping configuration");
+    }
+    this.pingConfig = candidate;
+    this.emitSnapshot();
+    return { ...candidate };
   }
 
   resetStats(): void {
@@ -594,10 +636,11 @@ class MeshImpl implements MeshPeer {
       identity: this.identity,
       engine: this.config.engine,
       iceServers: this.config.iceServers ?? [],
-      pingBytes: this.config.pingBytes,
+      pingConfig: () => ({ ...this.pingConfig }),
       pingTimeoutMs: this.config.pingTimeoutMs ?? 4_000,
       logger: this.logger,
       webRtcEnabled: () => this.webRtcEnabled,
+      router: this.router,
       onChange: () => this.emitSnapshot(),
       reportIssue: (level, message, context) => this.reportIssue(level, message, context),
     });
@@ -656,6 +699,12 @@ class MeshImpl implements MeshPeer {
     const cutoff = Date.now() - ttl;
     for (const [peerId, peer] of this.peers) {
       if (peer.lastSeen < cutoff) {
+        // MQTT presence is not a liveness oracle for an authenticated P2P link.
+        if (
+          !this.connection?.connected &&
+          (this.pairs.get(peerId)?.isDirectP2P() || this.router.hasRoute(peerId))
+        )
+          continue;
         this.logger.info("peer expired", { peerId, name: peer.name });
         this.removePeer(peerId);
       }
@@ -664,16 +713,25 @@ class MeshImpl implements MeshPeer {
 
   private pingNextPeer(): void {
     if (this.stopped) return;
-    const pairs = [...this.pairs.values()].filter((pair) => pair.canPing());
+    const pairs = [...this.pairs.values()];
     if (pairs.length === 0) return;
-    for (let i = 0; i < pairs.length; i += 1) {
-      const index = (this.pingCursor + i) % pairs.length;
+    const now = Date.now();
+    const selected = selectPingPeers(
+      now,
+      this.pingConfig,
+      pairs.map((pair) => ({
+        peerId: pair.peerId,
+        lastPingAt: this.lastPingAt.get(pair.peerId) ?? 0,
+        canPing: pair.canPing(),
+      })),
+      this.pingCursor % pairs.length,
+    );
+    for (const peerId of selected) {
+      const index = pairs.findIndex((pair) => pair.peerId === peerId);
       const pair = pairs[index]!;
-      if (pair.canPing()) {
-        this.pingCursor = (index + 1) % pairs.length;
-        void pair.sendPing();
-        return;
-      }
+      this.lastPingAt.set(peerId, now);
+      this.pingCursor = (index + 1) % pairs.length;
+      void pair.sendPing();
     }
   }
 
@@ -740,6 +798,7 @@ class MeshImpl implements MeshPeer {
       },
       brokerConnected: this.connection?.connected ?? false,
       webRtcEnabled: this.webRtcEnabled,
+      ping: { ...this.pingConfig },
       peers,
       totals,
       recentIssues: this.recentIssues.slice(0, 30),

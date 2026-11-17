@@ -20,6 +20,7 @@ const APP_VERSION = __APP_VERSION__;
 const CONFIG_KEY = "p2plink-demo-config";
 const TOKENS_KEY = "p2plink-registry-tokens";
 const FRIENDLY_KEY = "p2plink-friendly-name";
+const PING_CONFIG_KEY = "p2plink.ping.v1";
 const api = new RegistryApi(
   ((window as { __P2PLINK_DEMO_CONFIG__?: Record<string, unknown> }).__P2PLINK_DEMO_CONFIG__
     ?.registryUrl as string) ??
@@ -45,6 +46,12 @@ const totals = byId<HTMLDivElement>("totals");
 const brokerDot = byId<HTMLSpanElement>("broker-dot");
 const brokerUrlText = byId<HTMLSpanElement>("broker-url");
 const resetButton = byId<HTMLButtonElement>("reset-stats");
+const pingBytesInput = document.getElementById("ping-bytes") as HTMLInputElement | null;
+const pingIntervalInput = document.getElementById("ping-interval") as HTMLInputElement | null;
+const pingConcurrencyInput = document.getElementById("ping-concurrency") as HTMLInputElement | null;
+const pingEffective = document.getElementById("ping-effective");
+const pingStatus = document.getElementById("ping-status");
+const pingApply = document.getElementById("ping-apply");
 const offlineBanner = byId<HTMLDivElement>("offline-banner");
 const appVersion = byId<HTMLSpanElement>("app-version");
 const issuesSection = byId<HTMLElement>("issues");
@@ -58,7 +65,45 @@ const runtime = (window as { __P2PLINK_DEMO_CONFIG__?: Record<string, unknown> }
 const runtimeString = (key: string): string | undefined =>
   typeof runtime?.[key] === "string" ? (runtime[key] as string) : undefined;
 const defaultName = runtimeString("name") ?? env.VITE_PEER_NAME ?? `browser-${randomId}`;
-const pingBytes = Number(runtime?.pingBytes ?? env.VITE_PING_BYTES ?? 2048);
+interface MeshPingConfig {
+  bytes: number;
+  intervalMs: number;
+  concurrency: number;
+}
+const validPingField = (value: number, min: number, max: number) =>
+  Number.isInteger(value) && value >= min && value <= max;
+const pingDefaults: MeshPingConfig = {
+  bytes: (() => {
+    const value = Number(runtime?.pingBytes ?? env.VITE_PING_BYTES ?? 2048);
+    return validPingField(value, 1, 60000) ? value : 2048;
+  })(),
+  intervalMs: 250,
+  concurrency: 1,
+};
+const validPingConfig = (value: unknown): value is MeshPingConfig => {
+  if (!value || typeof value !== "object") return false;
+  const config = value as Partial<MeshPingConfig>;
+  return (
+    Number.isInteger(config.bytes) &&
+    config.bytes! >= 1 &&
+    config.bytes! <= 60000 &&
+    Number.isInteger(config.intervalMs) &&
+    config.intervalMs! >= 10 &&
+    config.intervalMs! <= 60000 &&
+    Number.isInteger(config.concurrency) &&
+    config.concurrency! >= 1 &&
+    config.concurrency! <= 32
+  );
+};
+const loadPingPreference = (): MeshPingConfig => {
+  try {
+    const value = JSON.parse(localStorage.getItem(PING_CONFIG_KEY) || "null");
+    return validPingConfig(value) ? value : pingDefaults;
+  } catch {
+    return pingDefaults;
+  }
+};
+let pingPreference = loadPingPreference();
 const runtimeIce = Array.isArray(runtime?.iceServers)
   ? (runtime.iceServers as { urls: string | string[] }[])
   : null;
@@ -70,6 +115,41 @@ const iceServers =
 
 let peer: MeshPeer | null = null;
 let registryPeerId: string | undefined;
+const updatePingInputs = (config: MeshPingConfig) => {
+  if (pingBytesInput) pingBytesInput.value = String(config.bytes);
+  if (pingIntervalInput) pingIntervalInput.value = String(config.intervalMs);
+  if (pingConcurrencyInput) pingConcurrencyInput.value = String(config.concurrency);
+};
+updatePingInputs(pingPreference);
+pingApply?.addEventListener("click", () => {
+  if (!pingBytesInput || !pingIntervalInput || !pingConcurrencyInput || !pingStatus) return;
+  const next = {
+    bytes: pingBytesInput.valueAsNumber,
+    intervalMs: pingIntervalInput.valueAsNumber,
+    concurrency: pingConcurrencyInput.valueAsNumber,
+  };
+  if (!validPingConfig(next)) {
+    pingStatus.textContent = "Inserisci interi validi nei range indicati.";
+    updatePingInputs(peer?.getPingConfig() ?? pingPreference);
+    return;
+  }
+  try {
+    const effective = peer ? peer.setPingConfig(next) : next;
+    pingPreference = effective;
+    try {
+      localStorage.setItem(PING_CONFIG_KEY, JSON.stringify(effective));
+    } catch {
+      // Storage disabled: retain the preference for this session.
+    }
+    updatePingInputs(effective);
+    pingStatus.textContent = peer
+      ? "Configurazione applicata."
+      : "Salvata per la prossima connessione.";
+  } catch (error) {
+    pingStatus.textContent = error instanceof Error ? error.message : String(error);
+    updatePingInputs(peer?.getPingConfig() ?? pingPreference);
+  }
+});
 const authPanel = byId<HTMLElement>("auth-panel");
 const authForm = byId<HTMLFormElement>("auth-form");
 const authEmail = byId<HTMLInputElement>("auth-email");
@@ -310,6 +390,9 @@ function renderTotals(snapshot: MeshSnapshot): void {
 }
 
 function render(snapshot: MeshSnapshot): void {
+  if (pingEffective) {
+    pingEffective.textContent = `Valori effettivi: ${snapshot.ping.bytes} byte, ${snapshot.ping.intervalMs} ms, ${snapshot.ping.concurrency} concorrenti`;
+  }
   broker.dataset.connected = String(snapshot.brokerConnected);
   brokerDot.textContent = snapshot.brokerConnected ? "🟢" : "🔴";
   self.textContent = `${snapshot.self.name} (${snapshot.self.peerId})`;
@@ -442,7 +525,9 @@ async function connect(config: DemoConfig): Promise<void> {
     ...(config.clientId ? { clientId: config.clientId } : {}),
     ...(config.peerId ? { peerId: config.peerId } : {}),
     kind: "browser",
-    pingBytes,
+    pingBytes: pingPreference.bytes,
+    pingIntervalMs: pingPreference.intervalMs,
+    pingConcurrency: pingPreference.concurrency,
     iceServers,
     version: APP_VERSION,
     platform: navigator.userAgent,

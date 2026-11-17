@@ -45,6 +45,17 @@ Pacchetti principali:
 
 ## Quick start
 
+### Contratto condiviso tra client e server
+
+```ts
+type AppRpc = {
+  "users.get": {
+    request: { id: string };
+    response: { id: string; name: string };
+  };
+};
+```
+
 ### Server Node.js
 
 Il server deve esporre un endpoint HTTPS di bootstrap. L'endpoint autentica il token dell'applicazione e restituisce la configurazione MQTT a breve scadenza.
@@ -54,6 +65,7 @@ import { generateIdentity } from "@p2plink/crypto";
 import { P2PLinkServer, handleNodeBootstrapRequest } from "@p2plink/server";
 import { createNodeWebRtcEngine } from "@p2plink/webrtc/node";
 
+// type AppRpc definito sopra
 const server = new P2PLinkServer({
   serverId: "server-1",
   tenant: "default",
@@ -78,16 +90,25 @@ const server = new P2PLinkServer({
   },
   webrtc: {
     engine: createNodeWebRtcEngine(),
-    iceServers: [{ urls: "stun:stun.example.com:3478" }],
+    // iceServers: [{ urls: "stun:stun.example.com:3478" }], // vedi sotto
   },
 });
 
-server.register("users.get", async (request) => {
-  const { id } = request as { id: string };
-  return { id, name: await db.users.name(id) };
+server.register("users.get", async (req) => {
+  // register() non è generico: il contratto va annotato/castato nel handler.
+  const { id } = req as AppRpc["users.get"]["request"];
+  const name = await db.users.name(id);
+  return { id, name } satisfies AppRpc["users.get"]["response"];
 });
 
 await server.start();
+
+// In un handler o una route HTTP, quando conosci il client:
+async function notifyAppointment(context: { clientId: string }) {
+  const delivered = await server.emitTo(context.clientId, "appointment.updated", { id: "42" });
+  // delivered: boolean — push best-effort, nessuna risposta dal client
+  return delivered;
+}
 
 // Nel tuo server HTTPS:
 // handleNodeBootstrapRequest(server, req, res) su /p2plink/v1/bootstrap
@@ -99,13 +120,7 @@ await server.start();
 import { createP2PLinkClient, httpBootstrapProvider } from "@p2plink/client";
 import { generateIdentity } from "@p2plink/crypto";
 
-interface AppRpc {
-  "users.get": {
-    request: { id: string };
-    response: { id: string; name: string };
-  };
-}
-
+// type AppRpc definito sopra
 interface AppEvents {
   "appointment.updated": { id: string };
 }
@@ -120,22 +135,25 @@ const link = createP2PLinkClient<AppRpc, AppEvents>({
     identity: await generateIdentity("device-1", { extractable: true }),
   },
   mqtt: { url: "wss://broker.example.com/mqtt" },
-  webrtc: {
-    iceServers: [{ urls: "stun:stun.example.com:3478" }],
-  },
+  webrtc: {}, // iceServers si configurano quando servono (vedi sotto)
 });
 
 await link.connect();
 
-link.onStatus(({ status, transport, rttMs }) => {
-  console.log(status, transport, rttMs);
-});
-
 const user = await link.request("users.get", { id: "42" });
-link.on("appointment.updated", (event) => render(event));
+// user: { id: string; name: string } — dedotto da AppRpc, nessun cast
+console.log(user.name.toUpperCase());
+// payload tipizzato da AppEvents; on() ritorna unsubscribe
+link.on("appointment.updated", (payload) => render(payload));
 ```
 
 In Node.js si usa lo stesso client importando `@p2plink/client/node`.
+
+### STUN e TURN: quando servono
+
+STUN serve per scoprire l'indirizzo pubblico e attraversare NAT non simmetrici; TURN serve per NAT simmetrici/CGNAT o firewall restrittivi. Nella stessa LAN, o quando le candidate host sono raggiungibili, `iceServers` non serve: senza ICE servers WebRTC funziona solo in questi casi. In produzione configura STUN e, se necessario, TURN. Dettagli: [docs/fallback.md](docs/fallback.md) e [packages/webrtc](packages/webrtc/README.md).
+
+`link.on` riceve un evento push da `server.emitTo` (best-effort, senza risposta); `link.request` è domanda/risposta. Il parametro `request` esiste solo nell'handler registrato con `server.register`.
 
 ### Angular
 
@@ -192,22 +210,43 @@ Vedi [docs/nestjs.md](docs/nestjs.md).
 ## API essenziale
 
 ```ts
-const link = createP2PLinkClient<AppRpc, AppEvents>(config);
-
 await link.connect();
-const result = await link.request("users.get", { id: "42" });
-const unsubscribe = link.on("appointment.updated", handler);
+const user = await link.request("users.get", { id: "42" }); // AppRpc["users.get"]["response"]
+link.on("appointment.updated", (payload) => render(payload)); // push best-effort
 
 const status = link.getStatus();
 link.onStatus(listener);
-
 await link.disconnect();
 ```
 
-- `request()` restituisce una Promise tipizzata.
-- `on()` registra eventi push best-effort.
+- `request()` è domanda/risposta e restituisce una Promise tipizzata; il ritorno dell'handler è la risposta.
+- `on()` riceve eventi push best-effort: nessun ACK, retry o risposta.
 - `onStatus()` espone trasporto attivo, RTT, stato e ultimo errore.
 - `disconnect()` chiude sessione, MQTT, WebRTC e timer.
+
+### Cosa garantisce `await`
+
+Se `await link.request(...)` ritorna, la richiesta è stata consegnata, l'handler è stato eseguito e la risposta è arrivata su un frame cifrato tramite trasporto affidabile (DataChannel o MQTT QoS 1). Anche un handler senza `return` produce `null`, quindi il chiamante si risolve comunque: è prova dell'arrivo della richiesta.
+
+Questo non garantisce exactly-once né un effetto applicativo eseguito una sola volta. Per mutazioni usa `idempotent`/`idempotencyKey` e gestisci gli esiti ambigui:
+
+```ts
+import { P2PLinkError } from "@p2plink/core";
+
+try {
+  await link.request("orders.create", order, {
+    idempotent: true,
+    idempotencyKey: order.clientRequestId,
+  });
+} catch (error) {
+  if (error instanceof P2PLinkError && error.code === "OUTCOME_UNKNOWN") {
+    // Mutazione: non ritentare automaticamente; risincronizza o verifica lo stato.
+  }
+  throw error;
+}
+```
+
+Gli errori sono `P2PLinkError` con `code` (`OFFLINE`, `TIMEOUT`, `OUTCOME_UNKNOWN`, `SESSION_RESET`, ...). Per la semantica completa: [docs/reliability.md](docs/reliability.md).
 
 ## Affidabilità e limiti
 

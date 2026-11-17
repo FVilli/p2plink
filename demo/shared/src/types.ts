@@ -5,6 +5,12 @@ export type PeerKind = "browser" | "nest";
 export type PeerRoute = "p2p" | "mqtt" | "connecting";
 export type IssueLevel = "warn" | "error";
 
+export interface MeshPingConfig {
+  bytes: number;
+  intervalMs: number;
+  concurrency: number;
+}
+
 export interface MeshPeerConfig {
   /** MQTT broker URL: mqtt:// or mqtts:// in Node, ws:// or wss:// in browsers. */
   url: string;
@@ -26,6 +32,7 @@ export interface MeshPeerConfig {
   engine: WebRtcEngine;
   iceServers?: IceServer[];
   pingIntervalMs?: number;
+  pingConcurrency?: number;
   pingTimeoutMs?: number;
   /** Presence heartbeat interval. Default: 30 seconds. */
   presenceIntervalMs?: number;
@@ -89,6 +96,7 @@ export interface MeshSnapshot {
   self: { peerId: string; name: string; kind: PeerKind; version: string };
   brokerConnected: boolean;
   webRtcEnabled: boolean;
+  ping: MeshPingConfig;
   peers: PeerStats[];
   totals: MeshTotals;
   recentIssues: MeshIssue[];
@@ -115,6 +123,8 @@ export interface MeshPeer {
   getSnapshot(): MeshSnapshot;
   onSnapshot(listener: (snapshot: MeshSnapshot) => void): Unsubscribe;
   setWebRtcEnabled(enabled: boolean): void;
+  getPingConfig(): MeshPingConfig;
+  setPingConfig(next: Partial<MeshPingConfig>): MeshPingConfig;
   resetStats(): void;
   /** Publishes a diagnostic issue on MQTT (and stores it locally). */
   reportIssue(

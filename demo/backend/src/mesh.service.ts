@@ -19,7 +19,18 @@ export class MeshService implements OnModuleInit, OnApplicationShutdown {
       const configured = Number(process.env.PRESENCE_INTERVAL_MS ?? 30_000);
       return Number.isFinite(configured) && configured >= 1_000 ? configured : 30_000;
     })(),
-    pingBytes: Number(process.env.PING_BYTES ?? 2048),
+    pingBytes: (() => {
+      const n = Number(process.env.PING_BYTES ?? 2048);
+      return Number.isInteger(n) && n >= 1 && n <= 60_000 ? n : 2048;
+    })(),
+    pingIntervalMs: (() => {
+      const n = Number(process.env.PING_INTERVAL_MS ?? 250);
+      return Number.isInteger(n) && n >= 10 && n <= 60_000 ? n : 250;
+    })(),
+    pingConcurrency: (() => {
+      const n = Number(process.env.PING_CONCURRENCY ?? 1);
+      return Number.isInteger(n) && n >= 1 && n <= 32 ? n : 1;
+    })(),
     iceServers:
       process.env.STUN_URLS === ""
         ? []
