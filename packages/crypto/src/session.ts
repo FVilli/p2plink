@@ -1,4 +1,5 @@
-import { P2PLinkError, P2PLinkErrorCodes, equalBytes, type TransportKind } from "@p2plink/core";
+import { P2PLinkError, P2PLinkErrorCodes, equalBytes, type TransportKind,
+  type SessionTransportKind } from "@p2plink/core";
 import type { DerivedSession, DirectionalKeys } from "./handshake.js";
 import { ReplayWindow } from "./replay.js";
 import { randomBytes, utf8Encode } from "./encoding.js";
@@ -172,7 +173,7 @@ export interface TransportSecurityOptions {
 /** Binds the role (client/server) to the correct directional keys. */
 export class TransportSecurity {
   readonly sessionId: string;
-  private readonly ciphers: Record<TransportKind, FrameCipher>;
+  private readonly ciphers: Record<SessionTransportKind, FrameCipher>;
   private readonly signalCipher: FrameCipher;
   private destroyed = false;
 
@@ -189,14 +190,14 @@ export class TransportSecurity {
     this.signalCipher = makeSignalCipher(session, role, options);
   }
 
-  async seal(transport: TransportKind, plaintext: Uint8Array): Promise<Uint8Array> {
+  async seal(transport: SessionTransportKind, plaintext: Uint8Array): Promise<Uint8Array> {
     if (this.destroyed) {
       throw new P2PLinkError(P2PLinkErrorCodes.CLOSED, "Session security is closed");
     }
     return this.ciphers[transport].seal(plaintext);
   }
 
-  async open(transport: TransportKind, frame: Uint8Array): Promise<Uint8Array> {
+  async open(transport: SessionTransportKind, frame: Uint8Array): Promise<Uint8Array> {
     if (this.destroyed) {
       throw new P2PLinkError(P2PLinkErrorCodes.CLOSED, "Session security is closed");
     }

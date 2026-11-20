@@ -43,7 +43,15 @@ export type RequestArgs<C extends RpcContract, K extends keyof C & string> =
     ? [request?: RpcRequest<C, K>, options?: RequestOptions]
     : [request: RpcRequest<C, K>, options?: RequestOptions];
 
-export type TransportKind = "mqtt" | "webrtc";
+/**
+ * `"mqtt"` is the broker fallback, `"webrtc"` the direct P2P link and
+ * `"mesh"` a relayed link through intermediate peers (see `mesh.ts`).
+ */
+export type TransportKind = "mqtt" | "webrtc" | "mesh";
+
+/** Transports managed by the TransportManager health/fallback machinery. */
+export const SESSION_TRANSPORT_KINDS = ["mqtt", "webrtc"] as const;
+export type SessionTransportKind = (typeof SESSION_TRANSPORT_KINDS)[number];
 
 export type TransportState = "connecting" | "open" | "closed" | "failed";
 

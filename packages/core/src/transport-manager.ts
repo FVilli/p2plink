@@ -1,6 +1,7 @@
 import { P2PLinkError, P2PLinkErrorCodes } from "./errors.js";
 import { createEnvelope, decodeEnvelopeJson, encodeEnvelopeJson } from "./protocol.js";
 import type { Transport, TransportSendOptions, SessionSecurity } from "./transport.js";
+import { SESSION_TRANSPORT_KINDS, type SessionTransportKind } from "./types.js";
 import {
   DEFAULT_LIMITS,
   noopLogger,
@@ -90,7 +91,7 @@ export class TransportManager {
     ((from: TransportKind | null, to: TransportKind | null) => void) | undefined;
   private readonly onUnhealthy: ((kind: TransportKind) => void) | undefined;
 
-  private readonly health: Record<TransportKind, TransportHealth> = {
+  private readonly health: Record<SessionTransportKind, TransportHealth> = {
     mqtt: { ...EMPTY_HEALTH },
     webrtc: { ...EMPTY_HEALTH },
   };
@@ -140,7 +141,7 @@ export class TransportManager {
   start(): void {
     if (this.started || this.closed) return;
     this.started = true;
-    for (const kind of ["mqtt", "webrtc"] as const) this.attachTransport(kind);
+    for (const kind of SESSION_TRANSPORT_KINDS) this.attachTransport(kind);
     this.timer = setInterval(() => {
       this.heartbeat();
     }, this.limits.heartbeatIntervalMs);
@@ -154,14 +155,14 @@ export class TransportManager {
     this.closed = true;
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-    for (const kind of ["mqtt", "webrtc"] as const) this.detachTransport(kind);
+    for (const kind of SESSION_TRANSPORT_KINDS) this.detachTransport(kind);
     for (const waiter of this.readyWaiters) {
       waiter.reject(new P2PLinkError(P2PLinkErrorCodes.CLOSED, "Transport manager closed"));
     }
     this.readyWaiters.clear();
     this.pendingPings.clear();
     this.status = "closed";
-    for (const kind of ["mqtt", "webrtc"] as const) {
+    for (const kind of SESSION_TRANSPORT_KINDS) {
       const transport = this.transports[kind];
       if (transport) void transport.close().catch(() => undefined);
     }
@@ -436,7 +437,7 @@ export class TransportManager {
         });
       }
     }
-    for (const kind of ["mqtt", "webrtc"] as const) {
+    for (const kind of SESSION_TRANSPORT_KINDS) {
       if (this.transports[kind]?.state !== "open") continue;
       if (!force && this.active === "webrtc" && kind === "mqtt") {
         if (
@@ -569,10 +570,10 @@ export class TransportManager {
       }
     }
 
-    const anyOpen = (["mqtt", "webrtc"] as const).some(
+    const anyOpen = (SESSION_TRANSPORT_KINDS).some(
       (kind) => this.transports[kind]?.state === "open",
     );
-    const anyConnecting = (["mqtt", "webrtc"] as const).some(
+    const anyConnecting = (SESSION_TRANSPORT_KINDS).some(
       (kind) => this.transports[kind]?.state === "connecting",
     );
 
